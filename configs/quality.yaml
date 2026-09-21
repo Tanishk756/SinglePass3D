@@ -1,0 +1,9 @@
+video:
+  max_dimension: 3840
+frame_selection:
+  strategy: motion
+  motion_threshold: 8.0
+  blur_threshold: 60.0
+gps:
+  sync_method: interpolate
+  tolerance_seconds: 0.5

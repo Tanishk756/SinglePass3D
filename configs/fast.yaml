@@ -1,0 +1,8 @@
+video:
+  max_dimension: 1280
+frame_selection:
+  strategy: target_fps
+  target_fps: 0.5
+gps:
+  sync_method: nearest
+  tolerance_seconds: 2.0

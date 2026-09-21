@@ -1,0 +1,11 @@
+video:
+  max_dimension: 1920
+frame_selection:
+  strategy: target_fps
+  target_fps: 1.0
+  blur_threshold: 40.0
+gps:
+  sync_method: interpolate
+  tolerance_seconds: 1.0
+colmap:
+  use_gpu: false
