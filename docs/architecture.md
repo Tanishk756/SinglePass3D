@@ -14,4 +14,4 @@ flowchart LR
   A --> R[Metric sparse PLY and report]
 ```
 
-The sparse cloud is observed geometry from COLMAP. GPS provides a local ENU reference and scale through matched camera centers. A future depth branch must label its inferred geometry separately. Modules are independent of the parent React application.
+The sparse cloud is observed geometry from COLMAP. GPS provides a local ENU reference and scale through matched camera centers. A future depth branch must label its inferred geometry separately. Modules can run from any Windows project directory.

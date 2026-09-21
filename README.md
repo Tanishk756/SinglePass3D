@@ -2,7 +2,7 @@
 
 Author: Tanishk Singhal
 
-SinglePass3D is a Windows-first research prototype for reconstructing observed geometry from a single drone flight. This directory is isolated from the parent React application.
+SinglePass3D is a Windows-first research prototype for reconstructing observed geometry from a single drone flight. This is a standalone project.
 
 ## Windows setup
 
