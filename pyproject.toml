@@ -7,7 +7,7 @@ name = "singlepass3d"
 description = "Single-pass drone video to georeferenced 3D reconstruction"
 readme = "README.md"
 license = "MIT"
-version = "1.2.0"
+version = "1.2.1"
 authors = [{name = "Tanishk Singhal"}]
 requires-python = ">=3.11,<3.12"
 dependencies = ["pydantic>=2,<3", "PyYAML>=6,<7"]
@@ -31,7 +31,7 @@ ai = ["numpy>=1.24,<3", "torch>=2", "transformers>=4"]
 pointcloud = ["numpy>=1.24,<3", "open3d>=0.18"]
 mesh = ["trimesh>=4,<6"]
 segmentation = ["numpy>=1.24,<3", "ultralytics>=8.3,<9"]
-viewer = ["streamlit>=1.57,<2"]
+viewer = ["psutil>=5.9,<8", "streamlit>=1.57,<2"]
 
 [project.scripts]
 singlepass3d = "singlepass3d.cli:main"

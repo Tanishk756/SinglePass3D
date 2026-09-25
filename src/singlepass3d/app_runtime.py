@@ -85,10 +85,14 @@ def job_status(mission: Path) -> dict:
     if pid:
         try:
             import psutil
-            process = psutil.Process(pid)
-            running = process.is_running() and process.status() != psutil.STATUS_ZOMBIE
-        except (psutil.Error, OSError):
-            running = False
+        except ImportError:
+            psutil = None
+        if psutil is not None:
+            try:
+                process = psutil.Process(pid)
+                running = process.is_running() and process.status() != psutil.STATUS_ZOMBIE
+            except (psutil.Error, OSError):
+                running = False
     checkpoints = []
     for path in sorted((mission / "checkpoints").glob("*.json")):
         try:
