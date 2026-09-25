@@ -7,10 +7,20 @@ name = "singlepass3d"
 description = "Single-pass drone video to georeferenced 3D reconstruction"
 readme = "README.md"
 license = "MIT"
-version = "1.1.2"
+version = "1.2.0"
 authors = [{name = "Tanishk Singhal"}]
 requires-python = ">=3.11,<3.12"
 dependencies = ["pydantic>=2,<3", "PyYAML>=6,<7"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Operating System :: Microsoft :: Windows :: Windows 11",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Scientific/Engineering :: Image Processing",
+]
+
+[project.urls]
+Homepage = "https://github.com/Tanishk756/SinglePass3D"
+Issues = "https://github.com/Tanishk756/SinglePass3D/issues"
 
 [project.optional-dependencies]
 dev = ["build>=1.2,<2", "pytest>=8,<9", "ruff>=0.6"]

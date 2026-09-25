@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use SinglePass3D in research, cite this software."
+title: "SinglePass3D"
+type: software
+authors:
+  - family-names: Singhal
+    given-names: Tanishk
+repository-code: "https://github.com/Tanishk756/SinglePass3D"
+license: MIT
+version: 1.2.0

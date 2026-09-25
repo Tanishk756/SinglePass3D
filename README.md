@@ -1,5 +1,7 @@
 # SinglePass3D
 
+[![CI](https://github.com/Tanishk756/SinglePass3D/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanishk756/SinglePass3D/actions/workflows/ci.yml)
+
 **Author:** Tanishk Singhal
 
 SinglePass3D is a Windows-first research prototype that turns a single-pass drone video and timestamped GPS telemetry into observed sparse or dense geometry, metric local coordinates, reports, and optional mesh products. It never treats unseen or monocularly inferred surfaces as measured geometry.
@@ -79,6 +81,8 @@ The pipeline applies a minimum reconstruction quality gate before accepting an o
 ## Accuracy and limitations
 
 Alignment residuals quantify agreement with supplied GPS; they are not independent absolute accuracy. Defensible absolute accuracy needs ground control or surveyed checkpoints. Single-pass occlusion, limited parallax, collinear flight, blur, poor overlap, weak or repeated texture, moving objects, shadows, reflectivity, clock offset, antenna lever arm, GPS uncertainty, and altitude datum errors can degrade results. See docs/accuracy.md and docs/limitations.md.
+
+For evaluation methodology and advanced learned-backend policy, see [benchmarking](docs/benchmarking.md) and [model backends](docs/model-backends.md).
 
 ## Troubleshooting
 

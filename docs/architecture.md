@@ -8,10 +8,14 @@ flowchart LR
   I --> F[Select frames]
   T[UTC GPS telemetry] --> S[Sync]
   F --> S
-  F --> C[COLMAP SfM]
+  F --> M[Optional dynamic masks]
+  M --> C[COLMAP SfM]
   C --> A[Similarity alignment]
   S --> A
   A --> R[Metric sparse PLY and report]
+  C --> D[COLMAP MVS]
+  D --> P[Filtered dense cloud]
+  P --> G[Poisson mesh and GLB]
 ```
 
-The sparse cloud is observed geometry from COLMAP. GPS provides a local ENU reference and scale through matched camera centers. A future depth branch must label its inferred geometry separately. Modules can run from any Windows project directory.
+The sparse and fused clouds are observed geometry from COLMAP. GPS provides a local ENU reference and scale through matched camera centers. Depth Anything produces separately labeled relative inferred depth. Poisson output is an inferred surface between observed samples. Modules can run from any Windows project directory.
