@@ -1,0 +1,44 @@
+video:
+  max_dimension: 1920
+frame_selection:
+  strategy: target_fps
+  target_fps: 3.0
+  blur_threshold: 60.0
+  brightness_min: 15.0
+  brightness_max: 245.0
+gps:
+  sync_method: interpolate
+  tolerance_seconds: 0.5
+camera:
+  model: SIMPLE_RADIAL
+  parameters: null
+  single_camera: true
+colmap:
+  use_gpu: true
+  sequential_overlap: 15
+depth:
+  model_id: depth-anything/Depth-Anything-V2-Small-hf
+  device: auto
+  batch_size: 1
+segmentation:
+  enabled: true
+  model_id: yolo11n-seg.pt
+  device: auto
+  confidence: 0.35
+  batch_size: 4
+reconstruction:
+  dense: true
+  inferred_depth: true
+  process_pointcloud: true
+  mesh: true
+  min_registered_images: 12
+  min_registered_fraction: 0.70
+  min_sparse_points: 8000
+pointcloud:
+  voxel_size_m: 0.05
+  neighbors: 24
+  std_ratio: 1.8
+mesh:
+  depth: 9
+  min_points: 3000
+  density_quantile: 0.05

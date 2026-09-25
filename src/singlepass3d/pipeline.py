@@ -35,6 +35,13 @@ def reconstruct_visual(video: Path, output: Path, config: PipelineConfig,
     images = sorted((root / "frames").glob("*.jpg"))
     if len(images) < 3:
         raise ValueError("At least three usable frames are required for reconstruction")
+    from .capture_quality import assess_capture
+    run_stage(
+        root, "capture_preflight", 1, "capture-quality-v1",
+        {image.name: file_identifier(image) for image in images},
+        lambda: [Path(root / "quality/capture_quality.json")]
+        if (assess_capture(images, root / "quality") is not None) else [],
+    )
     image_ids = {image.name: file_identifier(image) for image in images}
 
     def sparse_action() -> list[Path]:
@@ -67,6 +74,7 @@ def reconstruct_visual(video: Path, output: Path, config: PipelineConfig,
                          "minimum_registered_images": config.reconstruction.min_registered_images,
                          "minimum_registered_fraction": config.reconstruction.min_registered_fraction,
                          "minimum_sparse_points": config.reconstruction.min_sparse_points},
+        "capture_quality": json.loads((root / "quality/capture_quality.json").read_text(encoding="utf-8")),
         "sfm": {"input_images": len(images), "registered_images": len(sparse.poses),
                 "registered_fraction": registered_fraction,
                 "sparse_points": sparse.point_count,
@@ -148,6 +156,9 @@ def build_report(root: Path) -> Path:
         },
         "gps_alignment": alignment,
     }
+    capture_quality = root / "quality/capture_quality.json"
+    if capture_quality.is_file():
+        report["capture_quality"] = json.loads(capture_quality.read_text(encoding="utf-8"))
     for section, path in {
         "dense": root / "pointcloud/metrics.json",
         "mesh": root / "mesh/metrics.json",
@@ -217,8 +228,15 @@ def reconstruct(video: Path, telemetry: Path, output: Path,
          "start_time": str(start_seconds)}, sync_action,
     )[0]
     images = sorted((root / "frames").glob("*.jpg"))
-    if not images:
-        raise ValueError("Frame extraction selected no usable images")
+    if len(images) < 3:
+        raise ValueError("At least three usable frames are required for reconstruction")
+    from .capture_quality import assess_capture
+    run_stage(
+        root, "capture_preflight", 1, "capture-quality-v1",
+        {image.name: file_identifier(image) for image in images},
+        lambda: [Path(root / "quality/capture_quality.json")]
+        if (assess_capture(images, root / "quality") is not None) else [],
+    )
     image_ids = {item.name: file_identifier(item) for item in images}
     mask_path = None
     if config.segmentation.enabled:

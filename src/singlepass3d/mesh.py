@@ -42,15 +42,20 @@ def generate_mesh(source: Path, output: Path, depth: int = 8,
         raise OSError(f"Failed to write {obj}")
     vertices = np.asarray(mesh.vertices)
     faces = np.asarray(mesh.triangles)
+    colors = np.asarray(mesh.vertex_colors)
+    vertex_colors = None
+    if len(colors) == len(vertices):
+        vertex_colors = np.clip(colors * 255, 0, 255).astype(np.uint8)
     glb = output / "scene.glb"
-    trimesh.Trimesh(vertices=vertices, faces=faces, process=False).export(glb)
+    trimesh.Trimesh(vertices=vertices, faces=faces, vertex_colors=vertex_colors,
+                    process=False).export(glb)
     metrics = {
         "source_points": count,
         "vertices": len(vertices),
         "triangles": len(faces),
         "coordinate_frame": "local ENU meters",
         "geometry_class": "inferred surface from observed dense points",
-        "texture": None,
+        "texture": "vertex colors" if vertex_colors is not None else None,
         "method": "screened Poisson",
     }
     (output / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")

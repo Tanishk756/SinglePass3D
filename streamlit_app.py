@@ -42,9 +42,14 @@ with st.container(border=True):
         "GPS telemetry (optional)", type=sorted(x.lstrip(".") for x in TELEMETRY_EXTENSIONS),
         help="CSV or JSON with timestamp, latitude, longitude and altitude")
     with st.form("reconstruction"):
+        mission_mode = st.segmented_control(
+            "Mission mode", ["SIH26158 metric", "Research video only"],
+            default="SIH26158 metric",
+            help="SIH26158 mode requires GPS/flight telemetry and produces metric ENU output.")
         row = st.container(horizontal=True)
-        profile = row.segmented_control("Quality profile", ["Fast", "Default", "Quality"],
-                                        default="Fast", key="profile")
+        profile = row.segmented_control(
+            "Quality profile", ["Fast", "Default", "Quality", "SIH26158"],
+            default="SIH26158", key="profile")
         product = row.segmented_control("Output", ["Sparse preview", "Dense + mesh"],
                                         default="Sparse preview", key="product")
         mission_name = st.text_input("Mission name", value="test-mission")
@@ -64,9 +69,16 @@ if submitted and video is not None:
         if telemetry is not None:
             telemetry_path = save_upload_stream(telemetry, telemetry.name, input_dir,
                                                 TELEMETRY_EXTENSIONS)
+        if mission_mode == "SIH26158 metric" and telemetry_path is None:
+            raise ValueError("SIH26158 metric mode requires GPS/flight telemetry.")
+        if mission_mode == "SIH26158 metric" and not start_time.strip():
+            raise ValueError("SIH26158 metric mode requires video frame-zero UTC time.")
+        if profile == "SIH26158" and telemetry_path is None:
+            raise ValueError("The SIH26158 profile requires GPS/flight telemetry.")
         command = reconstruction_command(
             video_path, mission, ROOT / "configs" / f"{profile.lower()}.yaml",
-            product == "Dense + mesh", telemetry_path, start_time.strip() or None)
+            product == "Dense + mesh" or profile == "SIH26158",
+            telemetry_path, start_time.strip() or None)
         start_job(command, mission)
         st.session_state.mission = str(mission)
         st.success("Reconstruction started. This page updates automatically.")

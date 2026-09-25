@@ -6,6 +6,17 @@
 
 SinglePass3D is a Windows-first research prototype that turns a single-pass drone video and timestamped GPS telemetry into observed sparse or dense geometry, metric local coordinates, reports, and optional mesh products. It never treats unseen or monocularly inferred surfaces as measured geometry.
 
+## SIH26158 challenge mode
+
+Select **SIH26158 metric** in the Streamlit app and upload the mandatory video and
+GPS/flight telemetry. The profile enables dynamic-object masking, learned relative-depth
+evidence, dense MVS, point-cloud filtering, meshing, stricter quality gates, and a
+capture preflight that warns about panorama-like or low-parallax footage.
+
+See [requirements traceability](docs/SIH26158-requirements.md) and the
+[drone capture guide](docs/capture-guide.md). The organizer dataset and missing official
+evaluation table are still required for final benchmark claims.
+
 ## Windows setup
 
 Required: Windows 11, PowerShell, Git, and Python 3.11. Install COLMAP separately for sparse or dense reconstruction.
