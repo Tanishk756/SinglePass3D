@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from singlepass3d.app_runtime import reconstruction_command, safe_stem, save_upload
+from singlepass3d.app_runtime import (
+    job_status,
+    reconstruction_command,
+    safe_stem,
+    save_upload,
+)
 
 
 def test_safe_upload_and_video_only_command(tmp_path: Path):
@@ -25,3 +30,14 @@ def test_metric_command_requires_start_time(tmp_path: Path):
     with pytest.raises(ValueError, match="start time"):
         reconstruction_command(Path("video.mp4"), tmp_path, Path("config.yaml"), False,
                                Path("telemetry.csv"), None)
+
+
+def test_failed_quality_gate_is_not_complete(tmp_path: Path):
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "metrics.json").write_text(
+        '{"quality_gate":{"passed":false}}', encoding="utf-8")
+    (tmp_path / "app-job.json").write_text('{"pid":999999}', encoding="utf-8")
+    status = job_status(tmp_path)
+    assert not status["complete"]
+    assert status["failed"]

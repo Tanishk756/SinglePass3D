@@ -99,7 +99,15 @@ def job_status(mission: Path) -> dict:
             continue
     log_path = mission / "app-job.log"
     log = log_path.read_text(encoding="utf-8", errors="replace")[-12000:] if log_path.is_file() else ""
-    complete = (mission / "reports/metrics.json").is_file()
+    metrics_path = mission / "reports/metrics.json"
+    accepted = True
+    if metrics_path.is_file():
+        try:
+            metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+            accepted = metrics.get("quality_gate", {}).get("passed", True)
+        except (OSError, json.JSONDecodeError):
+            accepted = False
+    complete = metrics_path.is_file() and accepted
     failed = not running and not complete and bool(state)
     return {**state, "running": running, "complete": complete, "failed": failed,
             "checkpoints": checkpoints, "log": log}

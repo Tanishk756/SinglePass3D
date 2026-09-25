@@ -58,6 +58,9 @@ class ReconstructionConfig(StrictModel):
     inferred_depth: bool = False
     process_pointcloud: bool = False
     mesh: bool = False
+    min_registered_images: int = Field(default=8, ge=3)
+    min_registered_fraction: float = Field(default=0.60, gt=0, le=1)
+    min_sparse_points: int = Field(default=5000, ge=1)
 
 
 class PointCloudConfig(StrictModel):

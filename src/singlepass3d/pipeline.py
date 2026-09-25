@@ -52,16 +52,37 @@ def reconstruct_visual(video: Path, output: Path, config: PipelineConfig,
     sparse_ply = geometry / "sparse_observed.ply"
     write_ply(model_files[1], sparse_ply, lambda points: points)
     sparse = read_sparse_text(model_files[0].parent)
+    registered_fraction = len(sparse.poses) / len(images)
+    quality_pass = (
+        len(sparse.poses) >= config.reconstruction.min_registered_images
+        and registered_fraction >= config.reconstruction.min_registered_fraction
+        and sparse.point_count >= config.reconstruction.min_sparse_points
+    )
     metrics: dict = {
         "coordinate_frame": "COLMAP arbitrary units",
         "metric_scale": False,
         "warning": "No GPS telemetry was supplied; distances are not meters.",
         "video": json.loads((root / "video_info.json").read_text(encoding="utf-8")),
-        "sfm": {"registered_images": len(sparse.poses), "sparse_points": sparse.point_count,
+        "quality_gate": {"passed": quality_pass,
+                         "minimum_registered_images": config.reconstruction.min_registered_images,
+                         "minimum_registered_fraction": config.reconstruction.min_registered_fraction,
+                         "minimum_sparse_points": config.reconstruction.min_sparse_points},
+        "sfm": {"input_images": len(images), "registered_images": len(sparse.poses),
+                "registered_fraction": registered_fraction,
+                "sparse_points": sparse.point_count,
                 "observations": sparse.observations,
                 "mean_track_length": sparse.mean_track_length,
                 "mean_reprojection_error_px": sparse.mean_reprojection_error_px},
     }
+    if not quality_pass:
+        reports = ensure_output(root / "reports")
+        (reports / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+        raise ValueError(
+            "Reconstruction quality gate failed: "
+            f"{len(sparse.poses)}/{len(images)} images registered and "
+            f"{sparse.point_count} sparse points. Increase frame overlap or use footage "
+            "with translational camera motion before dense reconstruction."
+        )
     if full:
         from .mvs import reconstruct_dense
         binary_models = [path.parent for path in (root / "reconstruction/sparse").rglob("images.bin")]
@@ -227,6 +248,17 @@ def reconstruct(video: Path, telemetry: Path, output: Path,
         model = root / "reconstruction/text_model"
         return [model / name for name in ("images.txt", "points3D.txt", "cameras.txt")]
     model_files = run_stage(root, "sparse", 1, config.digest_for("colmap"), image_ids, sparse_action)
+    sparse_result = read_sparse_text(model_files[0].parent)
+    registered_fraction = len(sparse_result.poses) / len(images)
+    if (len(sparse_result.poses) < config.reconstruction.min_registered_images
+            or registered_fraction < config.reconstruction.min_registered_fraction
+            or sparse_result.point_count < config.reconstruction.min_sparse_points):
+        raise ValueError(
+            "Reconstruction quality gate failed: "
+            f"{len(sparse_result.poses)}/{len(images)} images registered and "
+            f"{sparse_result.point_count} sparse points. Increase frame overlap or use "
+            "footage with translational camera motion."
+        )
     def align_action() -> list[Path]:
         from .geoexport import align_sparse
         destination = root / "geospatial"

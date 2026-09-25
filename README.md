@@ -74,6 +74,8 @@ Set camera.model and optional comma-separated camera.parameters in YAML for supp
 
 A mission contains manifest.json, checkpoints, logs, frames, synchronized telemetry, COLMAP models, geospatial trajectory and reference files, observed PLY clouds, optional inferred depth, optional mesh or GLB, and JSON or HTML metrics. The report includes only computed values such as accepted frames, registered cameras, sparse observations, track length, reprojection error, alignment residuals, and point or triangle counts.
 
+The pipeline applies a minimum reconstruction quality gate before accepting an output or starting dense processing. By default it requires at least eight registered images, 60% registration, and 5,000 sparse points. These thresholds reject obvious fragments; passing them does not establish survey accuracy. Panoramic rotation from one position cannot provide the parallax required for reliable 3D geometry.
+
 ## Accuracy and limitations
 
 Alignment residuals quantify agreement with supplied GPS; they are not independent absolute accuracy. Defensible absolute accuracy needs ground control or surveyed checkpoints. Single-pass occlusion, limited parallax, collinear flight, blur, poor overlap, weak or repeated texture, moving objects, shadows, reflectivity, clock offset, antenna lever arm, GPS uncertainty, and altitude datum errors can degrade results. See docs/accuracy.md and docs/limitations.md.
