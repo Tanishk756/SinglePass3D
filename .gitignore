@@ -3,6 +3,11 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
+build/
+dist/
 data/input/*
 data/output/*
 data/telemetry/*
+!data/input/.gitkeep
+!data/output/.gitkeep
+!data/telemetry/.gitkeep

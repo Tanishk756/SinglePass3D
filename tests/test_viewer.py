@@ -3,6 +3,7 @@ import threading
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 
 from singlepass3d.viewer import create_handler, mission_summary
 
@@ -28,3 +29,10 @@ def test_summary_and_safe_server(tmp_path):
             raise AssertionError("Traversal request unexpectedly succeeded")
     finally:
         server.shutdown(); thread.join(); server.server_close()
+
+
+def test_packaged_viewer_includes_metric_measurement():
+    asset = Path(__file__).parents[1] / "src/singlepass3d/viewer_assets/viewer.js"
+    source = asset.read_text(encoding="utf-8-sig")
+    assert "Measured distance:" in source
+    assert "worldScale" in source

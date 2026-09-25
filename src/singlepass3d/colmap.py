@@ -49,9 +49,16 @@ def run_colmap(executable: Path, arguments: list[str], log: Path) -> None:
     """Invoke COLMAP with an argument array and retain full stage output."""
     ensure_output(log.parent)
     command = [str(executable), *arguments]
+    environment = os.environ.copy()
+    if executable.name.lower() == "colmap.exe":
+        distribution = executable.parent.parent
+        plugins = distribution / "plugins"
+        environment["PATH"] = str(executable.parent) + os.pathsep + environment.get("PATH", "")
+        if plugins.is_dir():
+            environment["QT_PLUGIN_PATH"] = str(plugins)
     try:
         result = subprocess.run(command, capture_output=True, text=True,
-                                check=False, timeout=None)
+                                check=False, timeout=None, env=environment)
     except OSError as exc:
         raise PipelineError("colmap", str(exc), "Verify the COLMAP executable path") from exc
     log.write_text(result.stdout + "\n" + result.stderr, encoding="utf-8")

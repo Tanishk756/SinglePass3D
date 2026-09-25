@@ -19,6 +19,19 @@ class Check:
     status: str
     detail: str
 
+
+def _find_ffmpeg() -> str | None:
+    """Find FFmpeg on PATH or in WinGet's per-user package directory."""
+    executable = shutil.which("ffmpeg")
+    if executable:
+        return executable
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if not local_app_data:
+        return None
+    package_root = Path(local_app_data) / "Microsoft" / "WinGet" / "Packages"
+    candidates = sorted(package_root.glob("Gyan.FFmpeg_*/ffmpeg-*/bin/ffmpeg.exe"))
+    return str(candidates[-1]) if candidates else None
+
 def doctor(output: Path) -> list[Check]:
     checks = []
     version = sys.version_info
@@ -31,9 +44,12 @@ def doctor(output: Path) -> list[Check]:
         checks.append(Check("RAM", "PASS", f"{psutil.virtual_memory().total} bytes"))
     except ImportError:
         checks.append(Check("RAM", "WARN", "Install psutil to report installed RAM"))
-    for name, command in [("FFmpeg", "ffmpeg"), ("COLMAP", "colmap")]:
-        found = shutil.which(command)
-        checks.append(Check(name, "PASS" if found else "WARN", found or f"{command} not found"))
+    ffmpeg = _find_ffmpeg()
+    checks.append(Check("FFmpeg", "PASS" if ffmpeg else "WARN",
+                        ffmpeg or "ffmpeg not found"))
+    colmap = os.environ.get("COLMAP_EXE") or shutil.which("colmap.exe") or shutil.which("colmap")
+    checks.append(Check("COLMAP", "PASS" if colmap and Path(colmap).is_file() else "WARN",
+                        colmap or "COLMAP_EXE/colmap not found"))
     nvidia_smi = shutil.which("nvidia-smi")
     names = []
     if nvidia_smi:

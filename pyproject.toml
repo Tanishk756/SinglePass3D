@@ -4,16 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "singlepass3d"
-version = "0.1.0"
+description = "Single-pass drone video to georeferenced 3D reconstruction"
+readme = "README.md"
+license = "MIT"
+version = "1.0.0"
 authors = [{name = "Tanishk Singhal"}]
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.12"
 dependencies = ["pydantic>=2,<3", "PyYAML>=6,<7"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9", "ruff>=0.6"]
+dev = ["build>=1.2,<2", "pytest>=8,<9", "ruff>=0.6"]
 video = ["opencv-python>=4.8,<5"]
 geospatial = ["numpy>=1.24,<3", "pyproj>=3.5,<4"]
 reconstruction = ["pycolmap>=3.10"]
+ai = ["numpy>=1.24,<3", "torch>=2", "transformers>=4"]
+pointcloud = ["numpy>=1.24,<3", "open3d>=0.18"]
+mesh = ["trimesh>=4,<6"]
+segmentation = ["numpy>=1.24,<3", "ultralytics>=8.3,<9"]
+viewer = []
 
 [project.scripts]
 singlepass3d = "singlepass3d.cli:main"

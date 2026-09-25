@@ -85,7 +85,7 @@ class PipelineConfig(StrictModel):
     mesh: MeshConfig = Field(default_factory=MeshConfig)
 
     def digest(self) -> str:
-        return self.digest_for(*self.model_fields)
+        return self.digest_for(*type(self).model_fields)
 
     def digest_for(self, *sections: str) -> str:
         configuration = self.model_dump(mode="json")

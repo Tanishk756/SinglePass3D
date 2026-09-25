@@ -51,6 +51,15 @@ def build_report(root: Path) -> Path:
         report["inferred_depth"] = {
             "maps": len(depth_maps), "units": "relative", "geometry_class": "inferred"
         }
+    durations = {}
+    for checkpoint in (root / "checkpoints").glob("*.json"):
+        value = json.loads(checkpoint.read_text(encoding="utf-8"))
+        if value.get("duration_seconds") is not None:
+            durations[value["stage_name"]] = value["duration_seconds"]
+    if durations:
+        report["performance_seconds"] = {
+            "stages": durations, "recorded_total": sum(durations.values())
+        }
     destination = ensure_output(root / "reports")
     metrics = destination / "metrics.json"
     metrics.write_text(json.dumps(report, indent=2), encoding="utf-8")

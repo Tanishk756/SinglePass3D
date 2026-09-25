@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,6 +27,7 @@ class Checkpoint(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     artifact_paths: list[str]
     complete: bool
+    duration_seconds: float | None = None
 
     def valid_for(self, stage: str, version: int, config_hash: str,
                   inputs: dict[str, str], root: Path) -> bool:
@@ -82,6 +84,7 @@ def run_stage(root: Path, stage: str, version: int, config_hash: str,
         if prior.valid_for(stage, version, config_hash, inputs, root):
             return [root / item for item in prior.artifact_paths]
     logger = mission_logger(root)
+    started = time.perf_counter()
     try:
         artifacts = action()
         relative = [str(path.resolve().relative_to(root.resolve())) for path in artifacts]
@@ -89,7 +92,8 @@ def run_stage(root: Path, stage: str, version: int, config_hash: str,
             raise ValueError("Stage did not produce every declared artifact")
         checkpoint = Checkpoint(stage_name=stage, stage_version=version,
                                 configuration_hash=config_hash, input_identifiers=inputs,
-                                artifact_paths=relative, complete=True)
+                                artifact_paths=relative, complete=True,
+                                duration_seconds=time.perf_counter() - started)
         temporary = checkpoint_path.with_suffix(".tmp")
         temporary.write_text(checkpoint.model_dump_json(indent=2), encoding="utf-8")
         temporary.replace(checkpoint_path)

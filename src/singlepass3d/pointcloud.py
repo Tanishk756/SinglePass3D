@@ -41,7 +41,7 @@ def process_dense_cloud(source: Path, reference_path: Path, output: Path,
     cloud.transform(transform_matrix(reference))
     output = ensure_output(output)
     raw = output / "raw.ply"
-    if not o3d.io.write_point_cloud(str(raw), cloud):
+    if not o3d.io.write_point_cloud(str(raw), cloud, write_ascii=True):
         raise OSError(f"Failed to write {raw}")
     processed = cloud.voxel_down_sample(voxel_size_m)
     if len(processed.points) >= neighbors:
@@ -50,7 +50,7 @@ def process_dense_cloud(source: Path, reference_path: Path, output: Path,
     if len(processed.points) == 0:
         raise ValueError("Filtering removed every point; relax thresholds")
     filtered = output / "processed.ply"
-    if not o3d.io.write_point_cloud(str(filtered), processed):
+    if not o3d.io.write_point_cloud(str(filtered), processed, write_ascii=True):
         raise OSError(f"Failed to write {filtered}")
     bounds = processed.get_axis_aligned_bounding_box()
     metrics = {

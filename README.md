@@ -1,95 +1,63 @@
 # SinglePass3D
 
-Author: Tanishk Singhal
+**Author:** Tanishk Singhal
 
-SinglePass3D is a Windows-first research prototype for reconstructing observed geometry from a single drone flight. This is a standalone project.
+SinglePass3D is a Windows-first research prototype that turns a single-pass drone video and timestamped GPS telemetry into observed sparse or dense geometry, metric local coordinates, reports, and optional mesh products. It never treats unseen or monocularly inferred surfaces as measured geometry.
 
 ## Windows setup
 
-Install Python 3.11, Git, and optionally FFmpeg, COLMAP, OpenCV, and NVIDIA drivers. In PowerShell:
+Required: Windows 11, PowerShell, Git, and Python 3.11. Install COLMAP separately for sparse or dense reconstruction.
 
-    .\setup.ps1 -IncludeVideo
+    .\setup.ps1 -IncludeVideo -IncludeGeospatial
     .\run.ps1 doctor
     .\test.ps1
 
-The base install needs no GPU, COLMAP, or model weights. Optional extras are `video`, `geospatial`, `reconstruction`, and `dev`. CUDA-enabled PyTorch requires a separate install matched to the local NVIDIA driver.
+For all optional Python stages use .\setup.ps1 -Full. Full setup installs large AI and point-cloud packages but does not install COLMAP or CUDA drivers. Package groups are dev, video, geospatial, ai, pointcloud, mesh, and segmentation.
 
-## Commands
-
-    .\run.ps1 inspect-video ".\data\input\mission.mp4"
-    .\run.ps1 extract-frames ".\data\input\mission.mp4" --output ".\data\output\mission01" --config ".\configs\default.yaml"
-
-Frame extraction creates `frames/frame_manifest.csv`, selected JPEGs, `checkpoints/extract_frames.json`, and `logs/pipeline.log` in the output mission. The extraction checkpoint is invalidated by source size/mtime, configuration hash, or stage version.
-
-## Current architecture and limits
-
-Implemented: configuration, diagnostics, stage checkpoints, video inspection, and streaming frame extraction with blur/exposure filtering. GPS synchronization, COLMAP reconstruction, metric alignment, dense geometry, mesh, and viewer are pending. No geometry or accuracy claim is produced by the current CLI.
-
-Single-pass video has occlusions and limited parallax. Motion blur, weak or repeated texture, moving objects, shadows, reflective surfaces, insufficient overlap, GPS uncertainty, and monocular depth ambiguity can degrade results. Observed geometry and future inferred geometry must be labeled separately. Metric accuracy requires actual residual measurements, not an assumed GPS precision.
-
-The canonical telemetry format planned for the next stage requires timestamp, latitude, longitude, and altitude; optional fields are roll, pitch, yaw, and velocity components. Timestamps must share a documented clock origin with video. Use a local metric coordinate frame before geometric alignment.
-
-Troubleshooting: `doctor` reports optional tools as WARN and blocking Python/output failures as FAIL. If OpenCV is absent, install `.[video]`. If a video cannot be read, inspect codec support and verify the file is MP4 or MOV.
-
-## Telemetry and synchronization
-
-CSV files need `timestamp,latitude,longitude,altitude` headers. JSON files contain an array of objects with the same fields. Timestamps accept Unix seconds or timezone-aware ISO-8601, including `Z`. Latitude and longitude are WGS84 degrees; altitude is in meters in the source datum and must be documented by the operator. Optional roll, pitch, yaw, and velocity components are supported.
-
-    .\run.ps1 telemetry ".\data\telemetry\mission.csv"
-    .\run.ps1 sync-telemetry --manifest ".\data\output\mission01\frames\frame_manifest.csv" --telemetry ".\data\telemetry\mission.csv" --start-time "2026-01-01T10:00:00Z" --output ".\data\output\mission01\telemetry\frame_telemetry.csv"
-
-The video start time is required because a video frame timestamp is relative to the clip, while telemetry uses UTC. Unmatched selected frames remain in the synchronization CSV with empty position fields.
-
-## Sparse reconstruction
-
-Install COLMAP for Windows and add `colmap.exe` to PATH, set `COLMAP_EXE`, or set `colmap.executable` in the YAML config. Then run:
-
-    .\run.ps1 reconstruct-sparse --images ".\data\output\mission01\frames" --output ".\data\output\mission01" --config ".\configs\default.yaml"
-
-This executes feature extraction, sequential matching, incremental mapping, and text model conversion. Reported registered images, sparse points, and observations are parsed from COLMAP output. The stage checkpoint tracks selected image identities and configuration. No reconstruction was run in the development environment because COLMAP is absent.
-
-## Metric alignment
-
-With `.[geospatial]` installed, use registered COLMAP poses and synchronized frame GPS:
-
-    .\run.ps1 align-sparse --model ".\data\output\mission01\reconstruction\text_model" --synchronized ".\data\output\mission01\telemetry\frame_telemetry.csv" --output ".\data\output\mission01"
-
-The output includes a metric ENU PLY, camera poses, reference transform, and computed alignment residuals. A path with nearly collinear camera positions cannot constrain the full 3D orientation and is rejected. The CSV altitude datum must match the interpretation used for the local reference. Residuals describe fit to supplied GPS, not absolute survey accuracy.
-
-## One-command sparse milestone
-
-After installing `.[video,geospatial]` and COLMAP, provide a video start time on the same UTC clock as the telemetry:
+## Quick start
 
     .\run.ps1 reconstruct --video ".\data\input\mission.mp4" --telemetry ".\data\telemetry\mission.csv" --output ".\data\output\mission01" --start-time "2026-01-01T10:00:00Z"
 
-This runs the sparse milestone and writes `manifest.json`, checkpoints, logs, selected frames, frame telemetry, COLMAP model, georeferenced sparse PLY, camera poses, reference transform, and an HTML/JSON report. Re-running skips compatible completed stages. `report <mission>` regenerates the report from existing stage artifacts.
+Add --full to continue through COLMAP MVS, metric point-cloud filtering, and Poisson OBJ or GLB export. Optional inferred depth and dynamic masks are controlled in YAML. Every expensive stage writes a versioned checkpoint and skips compatible completed work.
 
-The dense reconstruction, optional AI depth, dynamic masking, mesh, GLB, and interactive viewer are not implemented yet. They must not be inferred from the sparse output.
+View completed output with .\run.ps1 viewer ".\data\output\mission01". The local WebGL viewer supports observed points, GPS and visual trajectories, orbit, zoom, visibility controls, and metric point-to-point measurement.
 
-## Optional inferred depth
+## Pipeline
 
-Install `.[ai,geospatial]` and run `.\run.ps1 estimate-depth --images ".\data\output\mission01\frames" --output ".\data\output\mission01\reconstruction\depth"`. The [Depth Anything V2 Small model](https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf) downloads on first use. Output `.npz` files contain relative depth maps tagged `inferred`; they are not metric geometry. The backend uses CUDA when available and falls back to CPU. No model weights are bundled.
+~~~mermaid
+flowchart LR
+  V[Video] --> F[Streaming frame selection]
+  T[GPS telemetry] --> S[UTC synchronization]
+  F --> S
+  F --> M[Optional dynamic masks]
+  M --> C[COLMAP sequential SfM]
+  S --> A[Robust GPS alignment]
+  C --> A
+  A --> P[Georeferenced sparse PLY]
+  C --> D[COLMAP MVS]
+  D --> Q[Metric filtered cloud]
+  Q --> G[Inferred Poisson surface OBJ and GLB]
+  P --> R[Computed report and viewer]
+~~~
 
-## Optional observed dense reconstruction
+Classical multi-view geometry produces observed sparse and dense points. Depth Anything produces relative inferred depth maps. Poisson meshing interpolates an inferred surface between observed points.
 
-After a successful sparse model, run:
+## Telemetry
 
-    .\run.ps1 reconstruct-dense --images ".\data\output\mission01\frames" --sparse-model ".\data\output\mission01\reconstruction\sparse\0" --output ".\data\output\mission01"
+CSV and JSON inputs require timestamp, latitude, longitude, and altitude. Optional fields are roll, pitch, yaw, velocity_x, velocity_y, and velocity_z. Timestamps are Unix seconds or timezone-aware ISO-8601. Latitude and longitude are WGS84. Altitude is currently interpreted as WGS84 ellipsoidal meters; convert orthometric heights first. Video frame zero requires an explicit UTC time.
 
-COLMAP performs image undistortion, geometric-consistency PatchMatch, and stereo fusion. The output reconstruction/dense/fused.ply contains observed dense points in the COLMAP reconstruction frame, not yet georeferenced meters. The printed count is read from its PLY header. Dense reconstruction has not been exercised locally because COLMAP is absent.
+## Camera and COLMAP
 
-## Optional metric dense point cloud
+Set camera.model and optional comma-separated camera.parameters in YAML for supplied calibration. With no parameters, COLMAP estimates intrinsics using the selected camera model. COLMAP is discovered from config, COLMAP_EXE, PATH, or common Windows locations. Commands use argument arrays and video-aware sequential matching.
 
-Install the pointcloud extra and process the COLMAP fused PLY with the sparse GPS transform:
+## Outputs
 
-    .\run.ps1 process-cloud --input ".\data\output\mission01\reconstruction\dense\fused.ply" --reference ".\data\output\mission01\geospatial\reference.json" --output ".\data\output\mission01\pointcloud"
+A mission contains manifest.json, checkpoints, logs, frames, synchronized telemetry, COLMAP models, geospatial trajectory and reference files, observed PLY clouds, optional inferred depth, optional mesh or GLB, and JSON or HTML metrics. The report includes only computed values such as accepted frames, registered cameras, sparse observations, track length, reprojection error, alignment residuals, and point or triangle counts.
 
-This creates raw.ply and processed.ply in local ENU meters, plus metrics.json with actual counts and bounds. The raw transformed cloud is retained separately. Open3D processing has not been exercised locally because Open3D is absent.
+## Accuracy and limitations
 
-## Optional mesh
+Alignment residuals quantify agreement with supplied GPS; they are not independent absolute accuracy. Defensible absolute accuracy needs ground control or surveyed checkpoints. Single-pass occlusion, limited parallax, collinear flight, blur, poor overlap, weak or repeated texture, moving objects, shadows, reflectivity, clock offset, antenna lever arm, GPS uncertainty, and altitude datum errors can degrade results. See docs/accuracy.md and docs/limitations.md.
 
-Install the pointcloud and mesh extras, then run:
+## Troubleshooting
 
-    .\run.ps1 mesh --input ".\data\output\mission01\pointcloud\processed.ply" --output ".\data\output\mission01\mesh"
-
-This writes an OBJ and GLB from a Poisson surface interpolated between observed dense points. The surface is labeled inferred, and no texture is claimed. Meshing requires sufficient input points and has not been exercised locally because Open3D and trimesh are absent.
+Doctor returns zero for PASS or WARN and nonzero for blocking failures. Missing optional GPU, CUDA, COLMAP, Open3D, or PyTorch components are warnings. Python other than 3.11 and an unwritable output directory are failures. Use python -m singlepass3d.cli --help for individual stage commands.
