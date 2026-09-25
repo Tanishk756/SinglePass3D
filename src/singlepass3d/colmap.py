@@ -129,7 +129,7 @@ def reconstruct_sparse(images: Path, output: Path, executable: Path,
     feature_args = ["feature_extractor", "--database_path", str(database),
                     "--image_path", str(images), "--ImageReader.camera_model",
                     camera_model, "--ImageReader.single_camera", str(int(single_camera)),
-                    "--SiftExtraction.use_gpu", str(int(use_gpu))]
+                    "--FeatureExtraction.use_gpu", str(int(use_gpu))]
     if camera_params:
         feature_args.extend(["--ImageReader.camera_params", camera_params])
     if masks is not None:
@@ -138,7 +138,7 @@ def reconstruct_sparse(images: Path, output: Path, executable: Path,
     run_colmap(executable, feature_args, output / "feature_extractor.log")
     run_colmap(executable, ["sequential_matcher", "--database_path", str(database),
                             "--SequentialMatching.overlap", str(overlap),
-                            "--SiftMatching.use_gpu", str(int(use_gpu))],
+                            "--FeatureMatching.use_gpu", str(int(use_gpu))],
                output / "sequential_matcher.log")
     run_colmap(executable, ["mapper", "--database_path", str(database),
                             "--image_path", str(images), "--output_path", str(sparse)],

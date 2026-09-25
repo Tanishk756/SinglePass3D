@@ -47,3 +47,6 @@ def test_feature_extractor_receives_camera_and_mask_settings(tmp_path, monkeypat
     assert features[features.index("--ImageReader.mask_path") + 1] == str(masks.resolve())
     assert features[features.index("--ImageReader.camera_params") + 1] == "1000,1000,500,500"
     assert features[features.index("--ImageReader.single_camera") + 1] == "1"
+    assert features[features.index("--FeatureExtraction.use_gpu") + 1] == "0"
+    matcher = calls[1]
+    assert matcher[matcher.index("--FeatureMatching.use_gpu") + 1] == "0"
