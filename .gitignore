@@ -13,3 +13,4 @@ data/telemetry/*
 !data/input/.gitkeep
 !data/output/.gitkeep
 !data/telemetry/.gitkeep
+/data/reference/

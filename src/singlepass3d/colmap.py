@@ -37,6 +37,7 @@ def discover_colmap(configured: str | None = None) -> Path:
         shutil.which("colmap"),
         r"C:\Program Files\COLMAP\COLMAP.bat",
         r"C:\Program Files\COLMAP\colmap.exe",
+        r"C:\Tools\COLMAP-4.2.0\bin\colmap.exe",
     ]
     for item in candidates:
         if item and Path(item).is_file():
@@ -126,8 +127,14 @@ def reconstruct_sparse(images: Path, output: Path, executable: Path,
     output = ensure_output(output)
     database = output / "database.db"
     sparse = ensure_output(output / "sparse")
+    image_list = output / "image_list.txt"
+    image_list.write_text(
+        "".join(f"{item.name}\n" for item in sorted(images.glob("*.jpg"))),
+        encoding="utf-8",
+    )
     feature_args = ["feature_extractor", "--database_path", str(database),
-                    "--image_path", str(images), "--ImageReader.camera_model",
+                    "--image_path", str(images), "--image_list_path", str(image_list),
+                    "--ImageReader.camera_model",
                     camera_model, "--ImageReader.single_camera", str(int(single_camera)),
                     "--FeatureExtraction.use_gpu", str(int(use_gpu))]
     if camera_params:

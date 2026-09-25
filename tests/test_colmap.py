@@ -44,6 +44,7 @@ def test_feature_extractor_receives_camera_and_mask_settings(tmp_path, monkeypat
     reconstruct_sparse(images, output, tmp_path / "colmap.exe", "PINHOLE", False, 5,
                        masks, "1000,1000,500,500", True)
     features = calls[0]
+    assert features[features.index("--image_list_path") + 1].endswith("image_list.txt")
     assert features[features.index("--ImageReader.mask_path") + 1] == str(masks.resolve())
     assert features[features.index("--ImageReader.camera_params") + 1] == "1000,1000,500,500"
     assert features[features.index("--ImageReader.single_camera") + 1] == "1"
