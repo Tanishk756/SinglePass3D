@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="SinglePass3D converts moving-camera video and telemetry into measurable 3D scene products.">
+<title>SinglePass3D · Video to measurable 3D</title><link rel="stylesheet" href="styles.css"></head>
+<body>
+<nav><a class="brand" href="#"><span class="cube">◇</span> SinglePass3D</a><div class="navlinks"><a href="#experience">Live demo</a><a href="#pipeline">Pipeline</a><a href="#results">Results</a><a class="gh" href="https://github.com/Tanishk756/SinglePass3D">GitHub ↗</a></div></nav>
+<main>
+<section class="hero"><div class="orb o1"></div><div class="orb o2"></div>
+<div class="eyebrow"><i></i> LOCAL · GPU ACCELERATED · MEASURABLE</div>
+<h1>One flight.<br><span>A world in 3D.</span></h1>
+<p>Convert moving-camera video and synchronized telemetry into georeferenced point clouds, camera trajectories, dense geometry, and exportable 3D surfaces.</p>
+<div class="actions"><a class="primary" href="#experience">Try live vision preview</a><a class="secondary" href="https://github.com/Tanishk756/SinglePass3D">View source</a></div>
+<div class="proof"><div><b>1.38M</b><small>fused points</small></div><div><b>35 / 35</b><small>frames registered</small></div><div><b>0.89 px</b><small>reprojection error</small></div><div><b>547K</b><small>mesh triangles</small></div></div>
+</section>
+
+<section id="experience" class="experience">
+<div class="sectionhead"><div><span class="tag">LIVE IN YOUR BROWSER</span><h2>See visual intelligence<br>while the video plays.</h2></div><p>Your video stays on your device. This preview performs real pixel analysis in the browser. The desktop pipeline performs full GPU-backed 3D reconstruction.</p></div>
+<div class="demo">
+<div class="screen"><div class="screenbar"><span><i class="red"></i><i class="amber"></i><i class="green"></i></span><em id="state">WAITING FOR VIDEO</em><label class="upload">Choose video<input id="videoInput" type="file" accept="video/*"></label></div>
+<div class="media"><video id="video" controls muted playsinline></video><canvas id="overlay"></canvas><div class="scan"></div><div class="empty" id="empty"><strong>Drop a flight video here</strong><span>MP4 · MOV · processed locally</span></div></div></div>
+<div class="telemetry"><div class="telehead"><span>LIVE 2D VISION</span><b id="clock">00:00.00</b></div>
+<div class="scope"><canvas id="analysis" width="480" height="270"></canvas><span>SPATIAL MOTION MAP</span></div>
+<div class="meters"><div><span>FEATURES</span><b id="features">0</b></div><div><span>MOTION</span><b id="motion">0.0</b></div><div><span>ANALYSIS</span><b id="fps">0 fps</b></div></div>
+<div class="note">This is a real-time 2D feature and motion preview. Dense 3D reconstruction runs in the local application.</div></div>
+</div></section>
+
+<section id="pipeline"><div class="sectionhead"><div><span class="tag">RECONSTRUCTION ENGINE</span><h2>Evidence at every stage.</h2></div></div>
+<div class="flow">
+<article><span>01</span><h3>Capture intelligence</h3><p>Reject blur and exposure failures. Measure overlap, feature strength, motion, and planar-scene risk before costly processing.</p></article>
+<article><span>02</span><h3>Visual geometry</h3><p>Register camera poses with sequential feature matching and bundle adjustment. Dynamic pixels can be masked automatically.</p></article>
+<article><span>03</span><h3>Metric alignment</h3><p>Synchronize GPS and flight metadata, reject position outliers, then transform geometry into a local metric ENU frame.</p></article>
+<article><span>04</span><h3>Dense delivery</h3><p>Fuse multi-view stereo depth, clean the observed cloud, create a colored surface, and export PLY, OBJ, GLB, JSON, and GeoJSON.</p></article>
+</div></section>
+
+<section id="results" class="results"><div class="resultcopy"><span class="tag">MEASURED REFERENCE RUN</span><h2>Built for inspection,<br>mapping, and decisions.</h2><p>A complete 1080p reference flight was processed on an RTX 2060. Every number shown here comes from generated artifacts and pipeline reports.</p><a class="primary" href="https://github.com/Tanishk756/SinglePass3D#quick-start">Run it locally</a></div>
+<div class="grid"><div><small>REGISTERED</small><b>100%</b><span>35 of 35 selected cameras</span></div><div><small>SPARSE TRACKS</small><b>9.88</b><span>mean observations per point</span></div><div><small>GPS FIT RMSE</small><b>0.748 m</b><span>agreement with supplied GPS</span></div><div><small>FILTERED CLOUD</small><b>83,817</b><span>metric observed points</span></div></div></section>
+<section class="features"><span>CAPTURE QA</span><span>DYNAMIC MASKS</span><span>AI DEPTH</span><span>DENSE MVS</span><span>METRIC MEASUREMENT</span><span>CHECKPOINT RESUME</span></section>
+</main>
+<footer><div class="brand"><span class="cube">◇</span> SinglePass3D</div><p>Single-pass video reconstruction with explicit geometry provenance.</p><a href="https://github.com/Tanishk756/SinglePass3D">GitHub ↗</a></footer>
+<script src="app.js"></script></body></html>

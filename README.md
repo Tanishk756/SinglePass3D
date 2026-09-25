@@ -1,100 +1,172 @@
 # SinglePass3D
 
 [![CI](https://github.com/Tanishk756/SinglePass3D/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanishk756/SinglePass3D/actions/workflows/ci.yml)
+[![Pages](https://github.com/Tanishk756/SinglePass3D/actions/workflows/pages.yml/badge.svg)](https://github.com/Tanishk756/SinglePass3D/actions/workflows/pages.yml)
 
-**Author:** Tanishk Singhal
+**Single-pass video reconstruction with explicit geometry provenance.**
 
-SinglePass3D is a Windows-first research prototype that turns a single-pass drone video and timestamped GPS telemetry into observed sparse or dense geometry, metric local coordinates, reports, and optional mesh products. It never treats unseen or monocularly inferred surfaces as measured geometry.
+SinglePass3D converts moving-camera video and synchronized position telemetry into
+georeferenced camera trajectories, sparse or dense point clouds, measurable local
+coordinates, diagnostic reports, and exportable 3D surfaces.
 
-## SIH26158 challenge mode
+[Live interactive showcase](https://tanishk756.github.io/SinglePass3D/) ·
+[Windows setup](docs/windows-setup.md) · [Capture guide](docs/capture-guide.md) ·
+[Reference benchmark](docs/reference-demo.md)
 
-Select **SIH26158 metric** in the Streamlit app and upload the mandatory video and
-GPS/flight telemetry. The profile enables dynamic-object masking, learned relative-depth
-evidence, dense MVS, point-cloud filtering, meshing, stricter quality gates, and a
-capture preflight that warns about panorama-like or low-parallax footage.
+## What it delivers
 
-See [requirements traceability](docs/SIH26158-requirements.md) and the
-[drone capture guide](docs/capture-guide.md). The organizer dataset and missing official
-evaluation table are still required for final benchmark claims.
+- **Capture intelligence:** blur, exposure, feature support, motion, overlap, and
+  homography-dominance diagnostics before costly processing.
+- **Reliable visual geometry:** GPU SIFT extraction, sequential matching, incremental
+  mapping, camera registration, and bundle adjustment through COLMAP.
+- **Metric georeferencing:** synchronized GPS/flight metadata, robust outlier rejection,
+  and a local East-North-Up coordinate frame in meters.
+- **Dynamic-scene resistance:** optional YOLO segmentation masks prevent people and
+  vehicles from driving camera pose estimation.
+- **Dense reconstruction:** geometric-consistency multi-view stereo, fused observed
+  points, voxel reduction, and statistical outlier filtering.
+- **AI evidence:** optional Depth Anything V2 maps are retained as relative inferred
+  evidence and never mislabeled as surveyed geometry.
+- **3D products:** colored PLY point clouds, vertex-colored OBJ/GLB surfaces, GeoJSON
+  trajectories, camera poses, machine-readable metrics, and an interactive viewer.
+- **Operational resilience:** checkpointed stages resume compatible work instead of
+  repeating an entire mission after interruption.
 
-## Windows setup
+## Measured reference result
 
-Required: Windows 11, PowerShell, Git, and Python 3.11. Install COLMAP separately for sparse or dense reconstruction.
+A synchronized 1920×1080 reference flight was processed end to end on an RTX 2060:
 
-    .\setup.ps1 -IncludeVideo -IncludeGeospatial
-    .\run.ps1 doctor
-    .\test.ps1
+| Metric | Result |
+|---|---:|
+| Registered cameras | 35 / 35 |
+| Sparse points | 9,616 |
+| Feature observations | 94,977 |
+| Mean track length | 9.88 |
+| Mean reprojection error | 0.889 px |
+| GPS alignment RMSE | 0.748 m |
+| Dense fused points | 1,381,333 |
+| Filtered observed points | 83,817 |
+| Surface triangles | 547,755 |
+| Recorded processing time | 33.5 minutes |
 
-For all optional Python stages use .\setup.ps1 -Full. Full setup installs large AI and point-cloud packages but does not install COLMAP or CUDA drivers. Package groups are dev, video, geospatial, ai, pointcloud, mesh, and segmentation.
+GPS alignment RMSE measures agreement with supplied onboard GPS. Independent survey
+accuracy requires checkpoints, RTK/PPK, or ground control.
 
-## Quick start
+## Launch the studio
 
-### Local upload application
+Requirements: Windows 11, Python 3.11, FFmpeg, and COLMAP.
 
-The Windows application accepts MP4 or MOV video, optional GPS telemetry, a speed profile, and sparse or dense output. Without telemetry it produces observed geometry in arbitrary COLMAP units. With synchronized telemetry it produces a metric local ENU reconstruction.
+```powershell
+cd C:\SinglePass3D
+.\setup.ps1 -Full -IncludeCuda
+.\run-app.ps1
+```
 
-    .\run-app.ps1
+Open `http://localhost:8501`.
 
-Open `http://localhost:8501`, upload a video, choose **Fast** and **Sparse preview**, and start reconstruction. The page reports completed checkpoints and exposes the processing log. When complete, download the PLY, GLB, or metrics and open the interactive 3D viewer. Reconstruction is batch processing rather than live real-time 3D; duration depends on video length, selected frames, output mode, and scene quality.
+1. Upload an MP4 or MOV flight.
+2. Add CSV or JSON telemetry for metric output.
+3. Choose **Fast**, **Balanced**, **Quality**, or **Advanced**.
+4. Select a sparse preview or dense cloud and mesh.
+5. Follow stage progress, inspect metrics, download products, and open the local 3D viewer.
 
-For a GPU-enabled full installation on an NVIDIA Windows system:
+The browser showcase performs a live 2D feature and motion preview. Full 3D reconstruction
+runs locally as a GPU-backed staged process.
 
-    .\setup.ps1 -Full -IncludeCuda
+## Command line
 
-The first dynamic-mask or inferred-depth run downloads its selected model weights. No model weights are committed to this repository.
+Metric reconstruction:
 
-### Command line
+```powershell
+.\run.ps1 reconstruct `
+  --video ".\data\input\flight.mp4" `
+  --telemetry ".\data\telemetry\flight.csv" `
+  --start-time "2026-01-01T10:00:00Z" `
+  --config ".\configs\advanced.yaml" `
+  --output ".\data\output\flight-01" `
+  --full
+```
 
-    .\run.ps1 reconstruct --video ".\data\input\mission.mp4" --telemetry ".\data\telemetry\mission.csv" --output ".\data\output\mission01" --start-time "2026-01-01T10:00:00Z"
+Video-only visual reconstruction:
 
-For a video-only visual reconstruction:
+```powershell
+.\run.ps1 reconstruct-video `
+  --video ".\data\input\flight.mp4" `
+  --output ".\data\output\visual-test" `
+  --config ".\configs\fast.yaml"
+```
 
-    .\run.ps1 reconstruct-video --video ".\data\input\mission.mp4" --output ".\data\output\visual-test" --config ".\configs\fast.yaml"
+Video-only output uses arbitrary reconstruction units. Metric measurement requires
+synchronized telemetry.
 
-Add --full to continue through COLMAP MVS, metric point-cloud filtering, and Poisson OBJ or GLB export. Optional inferred depth and dynamic masks are controlled in YAML. Every expensive stage writes a versioned checkpoint and skips compatible completed work.
+## Processing graph
 
-View completed output with .\run.ps1 viewer ".\data\output\mission01". The local WebGL viewer supports observed points, GPS and visual trajectories, orbit, zoom, visibility controls, and metric point-to-point measurement.
-
-## Pipeline
-
-~~~mermaid
+```mermaid
 flowchart LR
-  V[Video] --> F[Streaming frame selection]
-  T[GPS telemetry] --> S[UTC synchronization]
-  F --> S
-  F --> M[Optional dynamic masks]
-  M --> C[COLMAP sequential SfM]
-  S --> A[Robust GPS alignment]
+  V[Video] --> Q[Capture QA]
+  T[Position telemetry] --> S[Time sync]
+  Q --> M[Dynamic masks]
+  M --> C[Sparse visual geometry]
+  S --> A[Robust metric alignment]
   C --> A
-  A --> P[Georeferenced sparse PLY]
-  C --> D[COLMAP MVS]
-  D --> Q[Metric filtered cloud]
-  Q --> G[Inferred Poisson surface OBJ and GLB]
-  P --> R[Computed report and viewer]
-~~~
+  C --> D[Dense multi-view stereo]
+  D --> P[Filtered observed cloud]
+  P --> G[Colored surface]
+  A --> X[Geospatial exports]
+  G --> R[Viewer and reports]
+  X --> R
+```
 
-Classical multi-view geometry produces observed sparse and dense points. Depth Anything produces relative inferred depth maps. Poisson meshing interpolates an inferred surface between observed points.
+## Input formats
 
-## Telemetry
+Telemetry CSV or JSON requires:
 
-CSV and JSON inputs require timestamp, latitude, longitude, and altitude. Optional fields are roll, pitch, yaw, velocity_x, velocity_y, and velocity_z. Timestamps are Unix seconds or timezone-aware ISO-8601. Latitude and longitude are WGS84. Altitude is currently interpreted as WGS84 ellipsoidal meters; convert orthometric heights first. Video frame zero requires an explicit UTC time.
+- `timestamp`
+- `latitude`
+- `longitude`
+- `altitude`
 
-## Camera and COLMAP
+Optional fields: `roll`, `pitch`, `yaw`, `velocity_x`, `velocity_y`, and
+`velocity_z`. Timestamps may be Unix seconds or timezone-aware ISO-8601.
 
-Set camera.model and optional comma-separated camera.parameters in YAML for supplied calibration. With no parameters, COLMAP estimates intrinsics using the selected camera model. COLMAP is discovered from config, COLMAP_EXE, PATH, or common Windows locations. Commands use argument arrays and video-aware sequential matching.
+See [telemetry format](docs/telemetry-format.md) and [accuracy guidance](docs/accuracy.md).
 
-## Outputs
+## Output contract
 
-A mission contains manifest.json, checkpoints, logs, frames, synchronized telemetry, COLMAP models, geospatial trajectory and reference files, observed PLY clouds, optional inferred depth, optional mesh or GLB, and JSON or HTML metrics. The report includes only computed values such as accepted frames, registered cameras, sparse observations, track length, reprojection error, alignment residuals, and point or triangle counts.
+Each mission contains:
 
-The pipeline applies a minimum reconstruction quality gate before accepting an output or starting dense processing. By default it requires at least eight registered images, 60% registration, and 5,000 sparse points. These thresholds reject obvious fragments; passing them does not establish survey accuracy. Panoramic rotation from one position cannot provide the parallax required for reliable 3D geometry.
+- versioned checkpoint records and stage logs
+- synchronized frame telemetry
+- sparse and dense reconstruction artifacts
+- local ENU transform and camera trajectory
+- observed PLY clouds
+- optional relative-depth evidence
+- vertex-colored OBJ and GLB surfaces
+- JSON metrics and HTML report
 
-## Accuracy and limitations
+Reports distinguish observed, aligned, interpolated, and inferred products.
 
-Alignment residuals quantify agreement with supplied GPS; they are not independent absolute accuracy. Defensible absolute accuracy needs ground control or surveyed checkpoints. Single-pass occlusion, limited parallax, collinear flight, blur, poor overlap, weak or repeated texture, moving objects, shadows, reflectivity, clock offset, antenna lever arm, GPS uncertainty, and altitude datum errors can degrade results. See docs/accuracy.md and docs/limitations.md.
+## Engineering limits
 
-For evaluation methodology and advanced learned-backend policy, see [benchmarking](docs/benchmarking.md) and [model backends](docs/model-backends.md).
+Monocular reconstruction needs translational camera motion and scene overlap. Rotation
+from one position cannot provide stable depth. Occlusion, collinear flight, rolling
+shutter, blur, repeated texture, moving objects, reflections, clock offset, antenna
+lever arm, GPS uncertainty, and altitude-datum mismatch can degrade results.
 
-## Troubleshooting
+See [limitations](docs/limitations.md), [benchmarking](docs/benchmarking.md), and
+[model backend strategy](docs/model-backends.md).
 
-Doctor returns zero for PASS or WARN and nonzero for blocking failures. Missing optional GPU, CUDA, COLMAP, Open3D, or PyTorch components are warnings. Python other than 3.11 and an unwritable output directory are failures. Use python -m singlepass3d.cli --help for individual stage commands.
+## Development
+
+```powershell
+.\test.ps1
+.\.venv\Scripts\python.exe -m ruff check src tests scripts streamlit_app.py
+.\.venv\Scripts\python.exe -m build
+```
+
+The repository includes Windows CI, tagged release builds, issue templates, security
+policy, citation metadata, and GitHub Pages deployment.
+
+## License
+
+MIT. Dataset and model assets retain their own licenses.
