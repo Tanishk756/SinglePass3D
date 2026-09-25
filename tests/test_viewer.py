@@ -1,0 +1,30 @@
+import json
+import threading
+import urllib.error
+import urllib.request
+from http.server import ThreadingHTTPServer
+
+from singlepass3d.viewer import create_handler, mission_summary
+
+
+def test_summary_and_safe_server(tmp_path):
+    mission = tmp_path / "mission"
+    (mission / "geospatial").mkdir(parents=True)
+    (mission / "geospatial/sparse_georeferenced.ply").write_text("ply", encoding="ascii")
+    viewer = tmp_path / "viewer"; viewer.mkdir()
+    (viewer / "index.html").write_text("viewer", encoding="utf-8")
+    assert "sparse" in mission_summary(mission)["layers"]
+    server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(mission, viewer))
+    thread = threading.Thread(target=server.serve_forever); thread.start()
+    try:
+        base = "http://127.0.0.1:" + str(server.server_port)
+        assert urllib.request.urlopen(base + "/", timeout=2).read() == b"viewer"
+        assert json.load(urllib.request.urlopen(base + "/api/mission", timeout=2))["name"] == "mission"
+        try:
+            urllib.request.urlopen(base + "/mission/../viewer/index.html", timeout=2)
+        except urllib.error.HTTPError as exc:
+            assert exc.code in {403, 404}
+        else:
+            raise AssertionError("Traversal request unexpectedly succeeded")
+    finally:
+        server.shutdown(); thread.join(); server.server_close()

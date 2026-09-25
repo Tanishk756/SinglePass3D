@@ -74,8 +74,17 @@ def main(argv: list[str] | None = None) -> int:
     mesh.add_argument("--output", type=Path, required=True)
     mesh.add_argument("--depth", type=int, default=8)
     mesh.add_argument("--min-points", type=int, default=1000)
+    viewer = commands.add_parser("viewer")
+    viewer.add_argument("mission", type=Path)
+    viewer.add_argument("--host", default="127.0.0.1")
+    viewer.add_argument("--port", type=int, default=8765)
+    viewer.add_argument("--no-browser", action="store_true")
     args = parser.parse_args(argv)
     try:
+        if args.command == "viewer":
+            from .viewer import serve
+            serve(args.mission, args.host, args.port, not args.no_browser)
+            return 0
         if args.command == "mesh":
             from .mesh import generate_mesh
             print(json.dumps(generate_mesh(args.input, args.output,
