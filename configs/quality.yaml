@@ -12,6 +12,9 @@ camera:
   model: SIMPLE_RADIAL
   parameters: null
   single_camera: true
+colmap:
+  use_gpu: true
+  sequential_overlap: 15
 segmentation:
   enabled: false
 reconstruction:

@@ -1,0 +1,14 @@
+[server]
+maxUploadSize = 8192
+headless = false
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+primaryColor = "#2F80ED"
+backgroundColor = "#F7F9FC"
+secondaryBackgroundColor = "#EAF1FB"
+textColor = "#162033"
+baseRadius = "0.6rem"
+buttonRadius = "0.5rem"

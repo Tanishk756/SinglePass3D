@@ -16,7 +16,27 @@ For all optional Python stages use .\setup.ps1 -Full. Full setup installs large 
 
 ## Quick start
 
+### Local upload application
+
+The Windows application accepts MP4 or MOV video, optional GPS telemetry, a speed profile, and sparse or dense output. Without telemetry it produces observed geometry in arbitrary COLMAP units. With synchronized telemetry it produces a metric local ENU reconstruction.
+
+    .\run-app.ps1
+
+Open `http://localhost:8501`, upload a video, choose **Fast** and **Sparse preview**, and start reconstruction. The page reports completed checkpoints and exposes the processing log. When complete, download the PLY, GLB, or metrics and open the interactive 3D viewer. Reconstruction is batch processing rather than live real-time 3D; duration depends on video length, selected frames, output mode, and scene quality.
+
+For a GPU-enabled full installation on an NVIDIA Windows system:
+
+    .\setup.ps1 -Full -IncludeCuda
+
+The first dynamic-mask or inferred-depth run downloads its selected model weights. No model weights are committed to this repository.
+
+### Command line
+
     .\run.ps1 reconstruct --video ".\data\input\mission.mp4" --telemetry ".\data\telemetry\mission.csv" --output ".\data\output\mission01" --start-time "2026-01-01T10:00:00Z"
+
+For a video-only visual reconstruction:
+
+    .\run.ps1 reconstruct-video --video ".\data\input\mission.mp4" --output ".\data\output\visual-test" --config ".\configs\fast.yaml"
 
 Add --full to continue through COLMAP MVS, metric point-cloud filtering, and Poisson OBJ or GLB export. Optional inferred depth and dynamic masks are controlled in YAML. Every expensive stage writes a versioned checkpoint and skips compatible completed work.
 

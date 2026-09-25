@@ -14,6 +14,94 @@ from .telemetry import load_telemetry, parse_timestamp, synchronize
 from .video import extract_frames, inspect_video
 
 
+def reconstruct_visual(video: Path, output: Path, config: PipelineConfig,
+                       full: bool = False) -> Path:
+    """Reconstruct a video without telemetry in explicitly arbitrary SfM units."""
+    root = ensure_output(output)
+    video_id = file_identifier(video)
+
+    def inspect_action() -> list[Path]:
+        info = inspect_video(video)
+        artifact = root / "video_info.json"
+        artifact.write_text(json.dumps(asdict(info), indent=2), encoding="utf-8")
+        return [artifact]
+
+    run_stage(root, "inspect_video", 1, config.digest_for("video"),
+              {"video": video_id}, inspect_action)
+    manifest = run_stage(
+        root, "extract_frames", 1, config.digest_for("video", "frame_selection"),
+        {"video": video_id}, lambda: [extract_frames(video, root / "frames", config)],
+    )[0]
+    images = sorted((root / "frames").glob("*.jpg"))
+    if len(images) < 3:
+        raise ValueError("At least three usable frames are required for reconstruction")
+    image_ids = {image.name: file_identifier(image) for image in images}
+
+    def sparse_action() -> list[Path]:
+        reconstruct_sparse(root / "frames", root / "reconstruction",
+                           discover_colmap(config.colmap.executable), config.camera.model,
+                           config.colmap.use_gpu, config.colmap.sequential_overlap, None,
+                           config.camera.parameters, config.camera.single_camera)
+        model = root / "reconstruction/text_model"
+        return [model / name for name in ("images.txt", "points3D.txt", "cameras.txt")]
+
+    model_files = run_stage(root, "sparse", 1, config.digest_for("colmap"),
+                            image_ids, sparse_action)
+    from .geoexport import write_ply
+    geometry = ensure_output(root / "geometry")
+    sparse_ply = geometry / "sparse_observed.ply"
+    write_ply(model_files[1], sparse_ply, lambda points: points)
+    sparse = read_sparse_text(model_files[0].parent)
+    metrics: dict = {
+        "coordinate_frame": "COLMAP arbitrary units",
+        "metric_scale": False,
+        "warning": "No GPS telemetry was supplied; distances are not meters.",
+        "video": json.loads((root / "video_info.json").read_text(encoding="utf-8")),
+        "sfm": {"registered_images": len(sparse.poses), "sparse_points": sparse.point_count,
+                "observations": sparse.observations,
+                "mean_track_length": sparse.mean_track_length,
+                "mean_reprojection_error_px": sparse.mean_reprojection_error_px},
+    }
+    if full:
+        from .mvs import reconstruct_dense
+        binary_models = [path.parent for path in (root / "reconstruction/sparse").rglob("images.bin")]
+        if not binary_models:
+            raise ValueError("No binary sparse model is available for dense reconstruction")
+        dense = reconstruct_dense(root / "frames", binary_models[0],
+                                  root / "reconstruction/dense",
+                                  discover_colmap(config.colmap.executable))
+        reference = root / "geometry/arbitrary_reference.json"
+        reference.write_text(json.dumps({"scale": 1.0, "rotation": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+                                         "translation_enu_m": [0, 0, 0]}), encoding="utf-8")
+        from .pointcloud import process_dense_cloud
+        cloud_metrics = process_dense_cloud(dense, reference, root / "pointcloud",
+                                             config.pointcloud.voxel_size_m,
+                                             config.pointcloud.neighbors,
+                                             config.pointcloud.std_ratio)
+        cloud_metrics["coordinate_frame"] = "COLMAP arbitrary units"
+        cloud_metrics["metric_scale"] = False
+        (root / "pointcloud/metrics.json").write_text(json.dumps(cloud_metrics, indent=2), encoding="utf-8")
+        metrics["dense"] = cloud_metrics
+        if config.reconstruction.mesh:
+            from .mesh import generate_mesh
+            mesh_metrics = generate_mesh(root / "pointcloud/processed.ply", root / "mesh",
+                                         config.mesh.depth, config.mesh.min_points,
+                                         config.mesh.density_quantile)
+            mesh_metrics["coordinate_frame"] = "COLMAP arbitrary units"
+            mesh_metrics["metric_scale"] = False
+            (root / "mesh/metrics.json").write_text(json.dumps(mesh_metrics, indent=2), encoding="utf-8")
+            metrics["mesh"] = mesh_metrics
+    reports = ensure_output(root / "reports")
+    report = reports / "metrics.json"
+    report.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    (root / "manifest.json").write_text(json.dumps({
+        "video": str(video.resolve()), "telemetry": None,
+        "coordinate_frame": "COLMAP arbitrary units", "metric_scale": False,
+        "report": str(report.relative_to(root)), "frame_manifest": str(manifest.relative_to(root)),
+    }, indent=2), encoding="utf-8")
+    return report
+
+
 def build_report(root: Path) -> Path:
     """Summarize only values present in completed stage artifacts."""
     info = json.loads((root / "video_info.json").read_text(encoding="utf-8"))

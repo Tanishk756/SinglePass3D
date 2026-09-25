@@ -8,7 +8,8 @@ gps:
   sync_method: interpolate
   tolerance_seconds: 1.0
 colmap:
-  use_gpu: false
+  use_gpu: true
+  sequential_overlap: 10
 
 camera:
   model: SIMPLE_RADIAL

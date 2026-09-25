@@ -4,6 +4,7 @@ param(
     [switch]$IncludeAI,
     [switch]$IncludePointCloud,
     [switch]$IncludeSegmentation,
+    [switch]$IncludeCuda,
     [switch]$Full
 )
 $ErrorActionPreference = "Stop"
@@ -15,8 +16,13 @@ if (-not $python) { throw "Python 3.11 is required. Install it from python.org, 
 if ($LASTEXITCODE -ne 0) { throw "Failed to create the Python 3.11 environment." }
 $venvPython = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
 & $venvPython -m pip install --upgrade pip
+if ($IncludeCuda) {
+    & $venvPython -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+    if ($LASTEXITCODE -ne 0) { throw "CUDA PyTorch installation failed." }
+}
 $extras = [System.Collections.Generic.List[string]]::new()
 $extras.Add("dev")
+$extras.Add("viewer")
 if ($IncludeVideo -or $Full) { $extras.Add("video") }
 if ($IncludeGeospatial -or $Full) { $extras.Add("geospatial") }
 if ($IncludeAI -or $Full) { $extras.Add("ai") }

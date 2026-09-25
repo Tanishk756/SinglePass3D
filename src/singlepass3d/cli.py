@@ -12,7 +12,7 @@ from .config import load_config
 from .core import ensure_output, file_identifier, run_stage
 from .doctor import doctor, doctor_exit
 from .mvs import ply_vertex_count, reconstruct_dense
-from .pipeline import build_report, reconstruct, reconstruct_full
+from .pipeline import build_report, reconstruct, reconstruct_full, reconstruct_visual
 from .telemetry import load_telemetry, parse_timestamp, synchronize
 from .video import extract_frames, inspect_video
 
@@ -55,6 +55,11 @@ def main(argv: list[str] | None = None) -> int:
     mission.add_argument("--start-time", help="UTC time of video frame zero")
     mission.add_argument("--full", action="store_true",
                          help="enable dense cloud processing and meshing")
+    visual_mission = commands.add_parser("reconstruct-video")
+    visual_mission.add_argument("--video", type=Path, required=True)
+    visual_mission.add_argument("--output", type=Path, required=True)
+    visual_mission.add_argument("--config", type=Path)
+    visual_mission.add_argument("--full", action="store_true")
     report = commands.add_parser("report")
     report.add_argument("mission", type=Path)
     depth = commands.add_parser("estimate-depth")
@@ -87,6 +92,14 @@ def main(argv: list[str] | None = None) -> int:
     masks.add_argument("--config", type=Path)
     args = parser.parse_args(argv)
     try:
+        if args.command == "reconstruct-video":
+            config = load_config(args.config)
+            if args.full:
+                config.reconstruction.dense = True
+                config.reconstruction.process_pointcloud = True
+                config.reconstruction.mesh = True
+            print(reconstruct_visual(args.video, args.output, config, args.full))
+            return 0
         if args.command == "mask-dynamics":
             from .masking import YoloSegmenter, create_masks
             config = load_config(args.config)

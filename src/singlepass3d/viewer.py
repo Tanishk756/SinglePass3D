@@ -14,14 +14,19 @@ def mission_summary(mission: Path) -> dict:
     mission = mission.resolve(strict=True)
     if not mission.is_dir():
         raise ValueError("Mission path must be a directory")
-    candidates = {"sparse": mission / "geospatial/sparse_georeferenced.ply",
+    candidates = {"sparse": (mission / "geospatial/sparse_georeferenced.ply"
+                             if (mission / "geospatial/sparse_georeferenced.ply").is_file()
+                             else mission / "geometry/sparse_observed.ply"),
                   "raw": mission / "pointcloud/raw.ply",
                   "processed": mission / "pointcloud/processed.ply",
                   "mesh": mission / "mesh/scene.glb",
                   "trajectory": mission / "geospatial/trajectory.geojson",
                   "camera_poses": mission / "geospatial/camera_poses.json",
                   "metrics": mission / "reports/metrics.json"}
-    return {"name": mission.name,
+    manifest = mission / "manifest.json"
+    metadata = json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else {}
+    return {"name": mission.name, "coordinate_frame": metadata.get("coordinate_frame"),
+            "metric_scale": metadata.get("metric_scale", True),
             "layers": {name: "/mission/" + path.relative_to(mission).as_posix()
                        for name, path in candidates.items() if path.is_file()}}
 

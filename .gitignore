@@ -5,6 +5,8 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+*.pt
+.streamlit/secrets.toml
 data/input/*
 data/output/*
 data/telemetry/*
