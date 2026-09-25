@@ -84,7 +84,9 @@ def align_sparse(model: Path, synchronized: Path, output: Path, threshold_m: flo
         json.dumps(trajectory_geojson, indent=2), encoding="utf-8")
     metrics = alignment.metrics()
     metrics.update({"registered_images": len(result.poses), "sparse_points": count,
-                    "observations": result.observations})
+                    "sfm_observations": result.observations,
+                    "mean_track_length": result.mean_track_length,
+                    "mean_reprojection_error_px": result.mean_reprojection_error_px})
     reference = {
         "coordinate_frame": "local ENU meters",
         "altitude_assumption": "Input altitude treated as WGS84 ellipsoidal meters",

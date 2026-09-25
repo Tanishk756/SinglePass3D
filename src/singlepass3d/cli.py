@@ -12,7 +12,7 @@ from .config import load_config
 from .core import ensure_output, file_identifier, run_stage
 from .doctor import doctor, doctor_exit
 from .mvs import ply_vertex_count, reconstruct_dense
-from .pipeline import build_report, reconstruct
+from .pipeline import build_report, reconstruct, reconstruct_full
 from .telemetry import load_telemetry, parse_timestamp, synchronize
 from .video import extract_frames, inspect_video
 
@@ -53,6 +53,8 @@ def main(argv: list[str] | None = None) -> int:
     mission.add_argument("--output", type=Path, required=True)
     mission.add_argument("--config", type=Path)
     mission.add_argument("--start-time", help="UTC time of video frame zero")
+    mission.add_argument("--full", action="store_true",
+                         help="enable dense cloud processing and meshing")
     report = commands.add_parser("report")
     report.add_argument("mission", type=Path)
     depth = commands.add_parser("estimate-depth")
@@ -79,8 +81,29 @@ def main(argv: list[str] | None = None) -> int:
     viewer.add_argument("--host", default="127.0.0.1")
     viewer.add_argument("--port", type=int, default=8765)
     viewer.add_argument("--no-browser", action="store_true")
+    masks = commands.add_parser("mask-dynamics")
+    masks.add_argument("--images", type=Path, required=True)
+    masks.add_argument("--output", type=Path, required=True)
+    masks.add_argument("--config", type=Path)
     args = parser.parse_args(argv)
     try:
+        if args.command == "mask-dynamics":
+            from .masking import YoloSegmenter, create_masks
+            config = load_config(args.config)
+            images = sorted(args.images.glob("*.jpg"))
+            device = config.segmentation.device
+            if device == "auto":
+                try:
+                    import torch
+                    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+                except ImportError:
+                    device = "cpu"
+            segmenter = YoloSegmenter(config.segmentation.model_id, device,
+                                      config.segmentation.confidence)
+            artifacts, manifest = create_masks(images, args.output, segmenter,
+                                               config.segmentation.batch_size)
+            print(json.dumps({"masks": len(artifacts), "manifest": str(manifest)}, indent=2))
+            return 0
         if args.command == "viewer":
             from .viewer import serve
             serve(args.mission, args.host, args.port, not args.no_browser)
@@ -136,7 +159,21 @@ def main(argv: list[str] | None = None) -> int:
             start_time = args.start_time or config.gps.video_start_time
             if not start_time:
                 raise ValueError("--start-time or gps.video_start_time is required")
-            page = reconstruct(args.video, args.telemetry, args.output, config, start_time)
+            if args.full:
+                config.reconstruction.dense = True
+                config.reconstruction.process_pointcloud = True
+                config.reconstruction.mesh = True
+                page = reconstruct_full(args.video, args.telemetry, args.output,
+                                        config, start_time)
+            elif any((config.reconstruction.dense,
+                      config.reconstruction.inferred_depth,
+                      config.reconstruction.process_pointcloud,
+                      config.reconstruction.mesh)):
+                page = reconstruct_full(args.video, args.telemetry, args.output,
+                                        config, start_time)
+            else:
+                page = reconstruct(args.video, args.telemetry, args.output,
+                                   config, start_time)
             print(page)
             return 0
         if args.command == "report":
@@ -172,15 +209,19 @@ def main(argv: list[str] | None = None) -> int:
             def action() -> list[Path]:
                 reconstruct_sparse(args.images, root / "reconstruction",
                                    discover_colmap(config.colmap.executable),
-                                   config.colmap.camera_model, config.colmap.use_gpu,
-                                   config.colmap.sequential_overlap)
+                                   config.camera.model, config.colmap.use_gpu,
+                                   config.colmap.sequential_overlap, None,
+                                   config.camera.parameters, config.camera.single_camera)
                 model = root / "reconstruction" / "text_model"
                 return [model / "images.txt", model / "points3D.txt", model / "cameras.txt"]
             paths = run_stage(root, "sparse", 1, config.digest_for("colmap"), identifiers, action)
             result = read_sparse_text(paths[0].parent)
             print(json.dumps({"registered_images": len(result.poses),
                               "sparse_points": result.point_count,
-                              "observations": result.observations}, indent=2))
+                              "observations": result.observations,
+                              "mean_track_length": result.mean_track_length,
+                              "mean_reprojection_error_px":
+                                  result.mean_reprojection_error_px}, indent=2))
             return 0
         if args.command == "align-sparse":
             from .geoexport import align_sparse

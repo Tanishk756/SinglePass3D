@@ -25,6 +25,8 @@ class SparseResult:
     poses: list[CameraPose]
     point_count: int
     observations: int
+    mean_track_length: float | None
+    mean_reprojection_error_px: float | None
 
 
 def discover_colmap(configured: str | None = None) -> Path:
@@ -93,13 +95,22 @@ def read_sparse_text(model: Path) -> SparseResult:
         observations += observed
         poses.append(CameraPose(int(parts[0]), parts[9], q, t, _camera_center(q, t),
                                 observed))
-    count = sum(bool(line.strip()) and not line.startswith("#")
-                for line in points_path.read_text(encoding="utf-8").splitlines())
-    return SparseResult(poses, count, observations)
+    point_rows = [line.split() for line in points_path.read_text(
+        encoding="utf-8").splitlines() if line.strip() and not line.startswith("#")]
+    track_lengths = [(len(row) - 8) // 2 for row in point_rows if len(row) >= 8]
+    errors = [float(row[7]) for row in point_rows if len(row) >= 8]
+    count = len(point_rows)
+    return SparseResult(
+        poses, count, observations,
+        sum(track_lengths) / count if count else None,
+        sum(errors) / count if count else None,
+    )
 
 
 def reconstruct_sparse(images: Path, output: Path, executable: Path,
-                       camera_model: str, use_gpu: bool, overlap: int) -> SparseResult:
+                       camera_model: str, use_gpu: bool, overlap: int,
+                       masks: Path | None = None, camera_params: str | None = None,
+                       single_camera: bool = True) -> SparseResult:
     """Feature extraction, sequential matching and incremental mapping."""
     images = images.resolve(strict=True)
     if not images.is_dir() or not any(images.glob("*.jpg")):
@@ -108,10 +119,16 @@ def reconstruct_sparse(images: Path, output: Path, executable: Path,
     output = ensure_output(output)
     database = output / "database.db"
     sparse = ensure_output(output / "sparse")
-    run_colmap(executable, ["feature_extractor", "--database_path", str(database),
-                            "--image_path", str(images), "--ImageReader.camera_model",
-                            camera_model, "--SiftExtraction.use_gpu", str(int(use_gpu))],
-               output / "feature_extractor.log")
+    feature_args = ["feature_extractor", "--database_path", str(database),
+                    "--image_path", str(images), "--ImageReader.camera_model",
+                    camera_model, "--ImageReader.single_camera", str(int(single_camera)),
+                    "--SiftExtraction.use_gpu", str(int(use_gpu))]
+    if camera_params:
+        feature_args.extend(["--ImageReader.camera_params", camera_params])
+    if masks is not None:
+        masks = masks.resolve(strict=True)
+        feature_args.extend(["--ImageReader.mask_path", str(masks)])
+    run_colmap(executable, feature_args, output / "feature_extractor.log")
     run_colmap(executable, ["sequential_matcher", "--database_path", str(database),
                             "--SequentialMatching.overlap", str(overlap),
                             "--SiftMatching.use_gpu", str(int(use_gpu))],

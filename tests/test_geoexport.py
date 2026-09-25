@@ -30,7 +30,8 @@ def test_align_artifacts(tmp_path, monkeypatch):
     monkeypatch.setattr("singlepass3d.geoexport.enu_to_wgs84",
                         lambda points, origin: points)
     metrics = align_sparse(model, sync, tmp_path / "out")
-    assert metrics["observations"] == 0
+    assert metrics["observations"] == 4
+    assert metrics["sfm_observations"] == 0
     assert metrics["sparse_points"] == 1
     assert (tmp_path / "out/trajectory.geojson").exists()
     assert json.loads((tmp_path / "out/reference.json").read_text())["scale"] == 2

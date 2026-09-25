@@ -34,9 +34,23 @@ def build_report(root: Path) -> Path:
             "registered_images": len(sparse.poses),
             "sparse_points": sparse.point_count,
             "observations": sparse.observations,
+            "mean_track_length": sparse.mean_track_length,
+            "mean_reprojection_error_px": sparse.mean_reprojection_error_px,
         },
         "gps_alignment": alignment,
     }
+    for section, path in {
+        "dense": root / "pointcloud/metrics.json",
+        "mesh": root / "mesh/metrics.json",
+        "dynamic_masks": root / "masks/manifest.json",
+    }.items():
+        if path.is_file():
+            report[section] = json.loads(path.read_text(encoding="utf-8"))
+    depth_maps = list((root / "reconstruction/depth").glob("*.npz"))
+    if depth_maps:
+        report["inferred_depth"] = {
+            "maps": len(depth_maps), "units": "relative", "geometry_class": "inferred"
+        }
     destination = ensure_output(root / "reports")
     metrics = destination / "metrics.json"
     metrics.write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -88,10 +102,31 @@ def reconstruct(video: Path, telemetry: Path, output: Path,
     if not images:
         raise ValueError("Frame extraction selected no usable images")
     image_ids = {item.name: file_identifier(item) for item in images}
+    mask_path = None
+    if config.segmentation.enabled:
+        from .masking import YoloSegmenter, create_masks
+        device = config.segmentation.device
+        if device == "auto":
+            try:
+                import torch
+                device = "cuda:0" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                device = "cpu"
+        segmenter = YoloSegmenter(config.segmentation.model_id, device,
+                                  config.segmentation.confidence)
+        def mask_action() -> list[Path]:
+            artifacts, manifest = create_masks(
+                images, root / "masks", segmenter, config.segmentation.batch_size)
+            return [*artifacts, manifest]
+        mask_artifacts = run_stage(
+            root, "dynamic_masks", 1, config.digest_for("segmentation"),
+            image_ids, mask_action)
+        mask_path = mask_artifacts[-1].parent
     def sparse_action() -> list[Path]:
         reconstruct_sparse(root / "frames", root / "reconstruction",
-                           discover_colmap(config.colmap.executable), config.colmap.camera_model,
-                           config.colmap.use_gpu, config.colmap.sequential_overlap)
+                           discover_colmap(config.colmap.executable), config.camera.model,
+                           config.colmap.use_gpu, config.colmap.sequential_overlap, mask_path,
+                           config.camera.parameters, config.camera.single_camera)
         model = root / "reconstruction/text_model"
         return [model / name for name in ("images.txt", "points3D.txt", "cameras.txt")]
     model_files = run_stage(root, "sparse", 1, config.digest_for("colmap"), image_ids, sparse_action)
@@ -120,3 +155,60 @@ def reconstruct(video: Path, telemetry: Path, output: Path,
     }
     (root / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return report
+
+
+def reconstruct_full(video: Path, telemetry: Path, output: Path,
+                     config: PipelineConfig, start_time: str) -> Path:
+    """Run sparse milestone and every enabled optional reconstruction stage."""
+    reconstruct(video, telemetry, output, config, start_time)
+    root = output.resolve()
+    images = sorted((root / "frames").glob("*.jpg"))
+    if config.reconstruction.inferred_depth:
+        from .depth import DepthAnythingEstimator, cached_depth
+        estimator = DepthAnythingEstimator(config.depth.model_id, config.depth.device,
+                                            config.depth.batch_size)
+        run_stage(
+            root, "relative_depth", 1, config.digest_for("depth"),
+            {image.name: file_identifier(image) for image in images},
+            lambda: cached_depth(images, root / "reconstruction/depth", estimator,
+                                 config.depth.batch_size),
+        )
+    if config.reconstruction.dense:
+        from .mvs import reconstruct_dense
+        binary_models = [path.parent for path in (root / "reconstruction/sparse").rglob("images.bin")]
+        if not binary_models:
+            raise ValueError("No binary COLMAP sparse model is available for dense reconstruction")
+        sparse_model = max(binary_models, key=lambda path: len(list(path.iterdir())))
+        dense_files = run_stage(
+            root, "dense", 1, config.digest_for("colmap"),
+            {**{image.name: file_identifier(image) for image in images},
+             **{path.name: file_identifier(path) for path in sparse_model.glob("*.bin")}},
+            lambda: [reconstruct_dense(images[0].parent, sparse_model,
+                                       root / "reconstruction/dense",
+                                       discover_colmap(config.colmap.executable))],
+        )
+        if config.reconstruction.process_pointcloud:
+            from .pointcloud import process_dense_cloud
+            reference = root / "geospatial/reference.json"
+            def cloud_action() -> list[Path]:
+                process_dense_cloud(dense_files[0], reference, root / "pointcloud",
+                                    config.pointcloud.voxel_size_m,
+                                    config.pointcloud.neighbors,
+                                    config.pointcloud.std_ratio)
+                return [root / "pointcloud/raw.ply", root / "pointcloud/processed.ply",
+                        root / "pointcloud/metrics.json"]
+            cloud_files = run_stage(
+                root, "pointcloud", 1, config.digest_for("pointcloud"),
+                {"dense": file_identifier(dense_files[0]),
+                 "reference": file_identifier(reference)}, cloud_action)
+            if config.reconstruction.mesh:
+                from .mesh import generate_mesh
+                def mesh_action() -> list[Path]:
+                    generate_mesh(cloud_files[1], root / "mesh", config.mesh.depth,
+                                  config.mesh.min_points, config.mesh.density_quantile)
+                    return [root / "mesh/scene.obj", root / "mesh/scene.glb",
+                            root / "mesh/metrics.json"]
+                run_stage(
+                    root, "mesh", 1, config.digest_for("mesh"),
+                    {"cloud": file_identifier(cloud_files[1])}, mesh_action)
+    return build_report(root)

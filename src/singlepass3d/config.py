@@ -28,10 +28,15 @@ class GPSConfig(StrictModel):
     tolerance_seconds: float = Field(default=1.0, gt=0)
     video_start_time: str | None = None
 
+class CameraConfig(StrictModel):
+    model: str = "SIMPLE_RADIAL"
+    parameters: str | None = None
+    single_camera: bool = True
+
+
 class ColmapConfig(StrictModel):
     executable: str | None = None
     use_gpu: bool = False
-    camera_model: str = "SIMPLE_RADIAL"
     sequential_overlap: int = Field(default=10, ge=1)
 
 class DepthConfig(StrictModel):
@@ -40,12 +45,44 @@ class DepthConfig(StrictModel):
     batch_size: int = Field(default=1, ge=1)
 
 
+class SegmentationConfig(StrictModel):
+    enabled: bool = False
+    model_id: str = "yolo11n-seg.pt"
+    device: Literal["auto", "cpu", "cuda:0"] = "auto"
+    confidence: float = Field(default=0.35, gt=0, le=1)
+    batch_size: int = Field(default=4, ge=1)
+
+
+class ReconstructionConfig(StrictModel):
+    dense: bool = False
+    inferred_depth: bool = False
+    process_pointcloud: bool = False
+    mesh: bool = False
+
+
+class PointCloudConfig(StrictModel):
+    voxel_size_m: float = Field(default=0.1, gt=0)
+    neighbors: int = Field(default=20, ge=2)
+    std_ratio: float = Field(default=2.0, gt=0)
+
+
+class MeshConfig(StrictModel):
+    depth: int = Field(default=8, ge=5, le=12)
+    min_points: int = Field(default=1000, ge=3)
+    density_quantile: float = Field(default=0.05, ge=0, lt=1)
+
+
 class PipelineConfig(StrictModel):
     video: VideoConfig = Field(default_factory=VideoConfig)
     frame_selection: FrameConfig = Field(default_factory=FrameConfig)
     gps: GPSConfig = Field(default_factory=GPSConfig)
+    camera: CameraConfig = Field(default_factory=CameraConfig)
     colmap: ColmapConfig = Field(default_factory=ColmapConfig)
     depth: DepthConfig = Field(default_factory=DepthConfig)
+    segmentation: SegmentationConfig = Field(default_factory=SegmentationConfig)
+    reconstruction: ReconstructionConfig = Field(default_factory=ReconstructionConfig)
+    pointcloud: PointCloudConfig = Field(default_factory=PointCloudConfig)
+    mesh: MeshConfig = Field(default_factory=MeshConfig)
 
     def digest(self) -> str:
         return self.digest_for(*self.model_fields)

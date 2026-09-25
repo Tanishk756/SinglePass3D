@@ -9,3 +9,15 @@ gps:
   tolerance_seconds: 1.0
 colmap:
   use_gpu: false
+
+camera:
+  model: SIMPLE_RADIAL
+  parameters: null
+  single_camera: true
+segmentation:
+  enabled: false
+reconstruction:
+  dense: false
+  inferred_depth: false
+  process_pointcloud: false
+  mesh: false
