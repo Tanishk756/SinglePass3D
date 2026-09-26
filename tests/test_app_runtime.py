@@ -5,7 +5,9 @@ import pytest
 from singlepass3d.app_runtime import (
     active_missions,
     job_status,
+    mission_history,
     reconstruction_command,
+    recover_mission,
     safe_stem,
     save_upload,
     start_job,
@@ -97,3 +99,18 @@ def test_full_job_with_sparse_metrics_is_partial(tmp_path: Path):
     assert status["partial"]
     assert not status["complete"]
     assert not status["failed"]
+
+
+def test_recover_mission_prefers_active_job(tmp_path: Path, monkeypatch):
+    completed = tmp_path / "completed"
+    completed.mkdir()
+    (completed / "reports").mkdir()
+    (completed / "reports/metrics.json").write_text("{}", encoding="utf-8")
+    active = tmp_path / "active"
+    active.mkdir()
+    (active / "app-job.json").write_text('{"pid":42}', encoding="utf-8")
+    monkeypatch.setattr(
+        "singlepass3d.app_runtime.active_missions", lambda _root: [active]
+    )
+    assert recover_mission(tmp_path) == active
+    assert set(mission_history(tmp_path)) == {active, completed}

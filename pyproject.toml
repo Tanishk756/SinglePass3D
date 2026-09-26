@@ -7,7 +7,7 @@ name = "singlepass3d"
 description = "Single-pass drone video to georeferenced 3D reconstruction"
 readme = "README.md"
 license = "MIT"
-version = "1.6.1"
+version = "1.6.2"
 authors = [{name = "Tanishk Singhal"}]
 requires-python = ">=3.11,<3.12"
 dependencies = ["pydantic>=2,<3", "PyYAML>=6,<7"]

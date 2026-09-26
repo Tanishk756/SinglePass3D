@@ -159,6 +159,35 @@ def start_job(command: list[str], mission: Path) -> int:
     return process.pid
 
 
+def mission_history(output_root: Path) -> list[Path]:
+    if not output_root.is_dir():
+        return []
+    return sorted(
+        (
+            path for path in output_root.iterdir()
+            if path.is_dir() and (
+                (path / "app-job.json").is_file()
+                or (path / "reports/metrics.json").is_file()
+            )
+        ),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+
+
+def recover_mission(output_root: Path) -> Path | None:
+    """Reconnect the desktop UI to active work, then the newest saved mission."""
+    missions = mission_history(output_root)
+    active = active_missions(output_root)
+    if active:
+        return max(active, key=lambda path: path.stat().st_mtime)
+    for mission in missions:
+        status = job_status(mission)
+        if status.get("partial"):
+            return mission
+    return missions[0] if missions else None
+
+
 def job_status(mission: Path) -> dict:
     state_path = mission / "app-job.json"
     state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.is_file() else {}

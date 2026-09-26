@@ -12,7 +12,9 @@ from singlepass3d.app_runtime import (
     TELEMETRY_EXTENSIONS,
     VIDEO_EXTENSIONS,
     job_status,
+    mission_history,
     reconstruction_command,
+    recover_mission,
     safe_stem,
     save_upload_stream,
     start_job,
@@ -49,7 +51,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-st.session_state.setdefault("mission", None)
+if "mission" not in st.session_state or not st.session_state.mission:
+    recovered = recover_mission(OUTPUT)
+    st.session_state.mission = str(recovered) if recovered else None
 st.session_state.setdefault("viewer_pid", None)
 
 st.markdown("""
@@ -77,6 +81,18 @@ color:#9fb1c8;font-size:.8rem;border-radius:0 8px 8px 0}
 with st.sidebar:
     st.markdown("### Mission")
     st.caption("One source. One configuration. One complete pipeline.")
+    missions = mission_history(OUTPUT)
+    if missions:
+        names = [mission.name for mission in missions]
+        current_name = Path(st.session_state.mission).name if st.session_state.mission else names[0]
+        selected = st.selectbox(
+            "Open mission", names,
+            index=names.index(current_name) if current_name in names else 0,
+            key="mission_selector",
+        )
+        selected_path = OUTPUT / selected
+        if st.session_state.mission != str(selected_path):
+            st.session_state.mission = str(selected_path)
     st.divider()
     st.markdown("**Accuracy policy**")
     st.caption(
