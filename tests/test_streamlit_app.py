@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
@@ -9,4 +9,5 @@ def test_app_initial_screen_renders():
     assert not result.exception
     assert any("SinglePass3D" in item.value for item in result.markdown)
     assert result.file_uploader[0].label == "Video"
-    assert result.button(key="FormSubmitter:reconstruction-Build reconstruction").disabled
+    assert result.button[0].label == "Generate 3D model"
+    assert result.button[0].disabled

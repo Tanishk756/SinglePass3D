@@ -29,9 +29,15 @@ def test_align_artifacts(tmp_path, monkeypatch):
                         lambda lat, lon, alt, origin: np.column_stack((lat * 2, lon * 2, lat * 0)))
     monkeypatch.setattr("singlepass3d.geoexport.enu_to_wgs84",
                         lambda points, origin: points)
-    metrics = align_sparse(model, sync, tmp_path / "out")
+    metrics = align_sparse(
+        model, sync, tmp_path / "out", altitude_datum="orthometric", geoid_separation_m=30.0
+    )
     assert metrics["observations"] == 4
     assert metrics["sfm_observations"] == 0
     assert metrics["sparse_points"] == 1
     assert (tmp_path / "out/trajectory.geojson").exists()
-    assert json.loads((tmp_path / "out/reference.json").read_text())["scale"] == 2
+    reference = json.loads((tmp_path / "out/reference.json").read_text())
+    assert reference["scale"] == 2
+    assert reference["input_altitude_datum"] == "orthometric"
+    trajectory = json.loads((tmp_path / "out/camera_poses.json").read_text())
+    assert trajectory[0]["gps_wgs84"][2] == 30.0

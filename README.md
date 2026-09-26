@@ -17,9 +17,10 @@ coordinates, diagnostic reports, and exportable 3D surfaces.
 
 - **Capture intelligence:** blur, exposure, feature support, motion, overlap, and
   homography-dominance diagnostics before costly processing.
-- **Reliable visual geometry:** GPU SIFT extraction, sequential matching, incremental
-  mapping, camera registration, and bundle adjustment through COLMAP.
-- **Metric georeferencing:** synchronized GPS/flight metadata, robust outlier rejection,
+- **Validated visual geometry:** GPU SIFT extraction, sequential matching, incremental
+  mapping, bundle adjustment, reprojection checks, and triangulation-angle checks.
+- **Metric georeferencing:** synchronized GPS/flight metadata, explicit ellipsoidal or
+  orthometric altitude handling, robust outlier rejection, trajectory-geometry checks,
   and a local East-North-Up coordinate frame in meters.
 - **Dynamic-scene resistance:** optional YOLO segmentation masks prevent people and
   vehicles from driving camera pose estimation.
@@ -64,14 +65,15 @@ cd C:\SinglePass3D
 
 Open `http://localhost:8501`.
 
-1. Upload an MP4 or MOV flight.
+1. Upload an MP4/MOV flight, or select a bounded webcam/RTSP/HTTP capture.
 2. Add CSV or JSON telemetry for metric output.
 3. Choose **Fast**, **Balanced**, **Quality**, or **Advanced**.
 4. Select a sparse preview or dense cloud and mesh.
 5. Follow stage progress, inspect metrics, download products, and open the local 3D viewer.
 
-The browser showcase performs a live 2D feature and motion preview. Full 3D reconstruction
-runs locally as a GPU-backed staged process.
+The browser showcase performs a live 2D feature and motion preview. Live sources are
+captured for a selected window, then processed locally with joint camera optimization.
+Dense 3D is a GPU-backed staged computation rather than instantaneous per-frame geometry.
 
 ## Command line
 
@@ -97,7 +99,8 @@ Video-only visual reconstruction:
 ```
 
 Video-only output uses arbitrary reconstruction units. Metric measurement requires
-synchronized telemetry.
+synchronized telemetry. For reliable intrinsics, enter calibrated camera parameters in
+the studio; leaving them empty asks COLMAP to estimate them from the mission.
 
 ## Processing graph
 

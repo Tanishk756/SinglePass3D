@@ -15,10 +15,12 @@ class VideoConfig(StrictModel):
     max_dimension: int | None = Field(default=1920, ge=128)
 
 class FrameConfig(StrictModel):
-    strategy: Literal["interval", "target_fps", "motion"] = "target_fps"
+    strategy: Literal["interval", "target_fps", "motion", "adaptive"] = "target_fps"
     interval_seconds: float = Field(default=1.0, gt=0)
     target_fps: float = Field(default=1.0, gt=0)
     motion_threshold: float = Field(default=12.0, ge=0)
+    adaptive_min_interval_seconds: float = Field(default=0.35, gt=0)
+    adaptive_max_interval_seconds: float = Field(default=1.5, gt=0)
     blur_threshold: float = Field(default=40.0, ge=0)
     brightness_min: float = Field(default=15.0, ge=0, le=255)
     brightness_max: float = Field(default=245.0, ge=0, le=255)
@@ -27,6 +29,11 @@ class GPSConfig(StrictModel):
     sync_method: Literal["nearest", "interpolate"] = "interpolate"
     tolerance_seconds: float = Field(default=1.0, gt=0)
     video_start_time: str | None = None
+    altitude_datum: Literal["ellipsoidal", "orthometric"] = "ellipsoidal"
+    geoid_separation_m: float | None = None
+    min_trajectory_length_m: float = Field(default=2.0, ge=0)
+    ransac_threshold_m: float = Field(default=5.0, gt=0)
+    max_alignment_rmse_m: float = Field(default=5.0, gt=0)
 
 class CameraConfig(StrictModel):
     model: str = "SIMPLE_RADIAL"
@@ -61,6 +68,8 @@ class ReconstructionConfig(StrictModel):
     min_registered_images: int = Field(default=8, ge=3)
     min_registered_fraction: float = Field(default=0.60, gt=0, le=1)
     min_sparse_points: int = Field(default=5000, ge=1)
+    min_median_triangulation_angle_deg: float = Field(default=1.0, ge=0)
+    max_mean_reprojection_error_px: float = Field(default=2.0, gt=0)
 
 
 class PointCloudConfig(StrictModel):

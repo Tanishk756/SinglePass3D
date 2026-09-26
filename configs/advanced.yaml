@@ -1,14 +1,21 @@
 video:
   max_dimension: 1920
 frame_selection:
-  strategy: target_fps
+  strategy: adaptive
   target_fps: 3.0
+  adaptive_min_interval_seconds: 0.30
+  adaptive_max_interval_seconds: 1.25
+  motion_threshold: 8.0
   blur_threshold: 60.0
   brightness_min: 15.0
   brightness_max: 245.0
 gps:
   sync_method: interpolate
   tolerance_seconds: 0.5
+  altitude_datum: ellipsoidal
+  min_trajectory_length_m: 2.0
+  ransac_threshold_m: 5.0
+  max_alignment_rmse_m: 5.0
 camera:
   model: SIMPLE_RADIAL
   parameters: null
@@ -34,6 +41,8 @@ reconstruction:
   min_registered_images: 12
   min_registered_fraction: 0.70
   min_sparse_points: 8000
+  min_median_triangulation_angle_deg: 1.0
+  max_mean_reprojection_error_px: 2.0
 pointcloud:
   voxel_size_m: 0.05
   neighbors: 24

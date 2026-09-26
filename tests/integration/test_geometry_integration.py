@@ -44,5 +44,6 @@ def test_metric_pointcloud_and_mesh_pipeline(tmp_path: Path) -> None:
         cloud_output / "processed.ply", mesh_output, depth=6, min_points=500)
     assert mesh_metrics["vertices"] > 0
     assert mesh_metrics["triangles"] > 0
+    assert mesh_metrics["cropped_to_observed_bounds"] is True
     assert (mesh_output / "scene.obj").stat().st_size > 0
     assert (mesh_output / "scene.glb").stat().st_size > 0

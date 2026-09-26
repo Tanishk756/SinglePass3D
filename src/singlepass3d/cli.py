@@ -90,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     masks.add_argument("--images", type=Path, required=True)
     masks.add_argument("--output", type=Path, required=True)
     masks.add_argument("--config", type=Path)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "reconstruct-video":
@@ -234,7 +235,13 @@ def main(argv: list[str] | None = None) -> int:
                               "observations": result.observations,
                               "mean_track_length": result.mean_track_length,
                               "mean_reprojection_error_px":
-                                  result.mean_reprojection_error_px}, indent=2))
+                                  result.mean_reprojection_error_px,
+                              "median_triangulation_angle_deg":
+                                  result.median_triangulation_angle_deg,
+                              "p10_triangulation_angle_deg":
+                                  result.p10_triangulation_angle_deg,
+                              "low_angle_point_fraction":
+                                  result.low_angle_point_fraction}, indent=2))
             return 0
         if args.command == "align-sparse":
             from .geoexport import align_sparse
@@ -269,6 +276,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     return 2
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

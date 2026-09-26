@@ -29,6 +29,8 @@ def generate_mesh(source: Path, output: Path, depth: int = 8,
         cloud, depth=depth)
     cutoff = float(np.quantile(np.asarray(densities), density_quantile))
     mesh.remove_vertices_by_mask(np.asarray(densities) < cutoff)
+    # Poisson fills unobserved volume; keep only the footprint supported by the cloud.
+    mesh = mesh.crop(cloud.get_axis_aligned_bounding_box())
     mesh.remove_duplicated_vertices()
     mesh.remove_duplicated_triangles()
     mesh.remove_degenerate_triangles()
@@ -40,6 +42,9 @@ def generate_mesh(source: Path, output: Path, depth: int = 8,
     obj = output / "scene.obj"
     if not o3d.io.write_triangle_mesh(str(obj), mesh):
         raise OSError(f"Failed to write {obj}")
+    ply = output / "scene.ply"
+    if not o3d.io.write_triangle_mesh(str(ply), mesh, write_ascii=True):
+        raise OSError(f"Failed to write {ply}")
     vertices = np.asarray(mesh.vertices)
     faces = np.asarray(mesh.triangles)
     colors = np.asarray(mesh.vertex_colors)
@@ -57,6 +62,8 @@ def generate_mesh(source: Path, output: Path, depth: int = 8,
         "geometry_class": "inferred surface from observed dense points",
         "texture": "vertex colors" if vertex_colors is not None else None,
         "method": "screened Poisson",
+        "cropped_to_observed_bounds": True,
+        "viewer_mesh": "scene.ply",
     }
     (output / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     return metrics

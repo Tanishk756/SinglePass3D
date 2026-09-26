@@ -38,8 +38,17 @@ def write_ply(source: Path, output: Path, transform) -> int:
     return len(rows)
 
 
-def align_sparse(model: Path, synchronized: Path, output: Path, threshold_m: float = 5.0) -> dict:
-    """Align registered visual cameras to matched GPS and write metric artifacts."""
+def align_sparse(
+    model: Path,
+    synchronized: Path,
+    output: Path,
+    threshold_m: float = 5.0,
+    altitude_datum: str = "ellipsoidal",
+    geoid_separation_m: float | None = None,
+    min_trajectory_length_m: float = 2.0,
+    max_alignment_rmse_m: float = 5.0,
+) -> dict:
+    """Align cameras to GPS with explicit altitude datum and geometry checks."""
     result = read_sparse_text(model)
     with synchronized.open(newline="", encoding="utf-8-sig") as stream:
         rows = list(csv.DictReader(stream))
@@ -52,7 +61,24 @@ def align_sparse(model: Path, synchronized: Path, output: Path, threshold_m: flo
         [float(row[key]) for key in ("latitude", "longitude", "altitude")]
         for _, row in pairs
     ])
+    if altitude_datum == "orthometric":
+        if geoid_separation_m is None:
+            raise ValueError(
+                "Orthometric altitude requires geoid_separation_m to convert to WGS84 ellipsoid"
+            )
+        coordinates[:, 2] += geoid_separation_m
+        origin = (origin[0], origin[1], origin[2] + geoid_separation_m)
+    elif altitude_datum != "ellipsoidal":
+        raise ValueError(f"Unsupported altitude datum: {altitude_datum}")
     gps_enu = wgs84_to_enu(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], origin)
+    segments = np.linalg.norm(np.diff(gps_enu, axis=0), axis=1)
+    trajectory_length = float(np.sum(segments))
+    displacement = float(np.linalg.norm(gps_enu[-1] - gps_enu[0]))
+    if trajectory_length < min_trajectory_length_m:
+        raise ValueError(
+            f"GPS trajectory is only {trajectory_length:.2f} m; "
+            f"at least {min_trajectory_length_m:.2f} m is required for stable scale"
+        )
     visual = np.array([pose.center for pose, _ in pairs])
     alignment = robust_alignment(visual, gps_enu, threshold_m=threshold_m)
     output = ensure_output(output)
@@ -62,10 +88,10 @@ def align_sparse(model: Path, synchronized: Path, output: Path, threshold_m: flo
         {"image": pose.name, "visual_center": pose.center,
          "enu_m": aligned.tolist(),
          "gps_enu_m": gps.tolist(),
-         "gps_wgs84": [float(row["longitude"]), float(row["latitude"]), float(row["altitude"])],
+         "gps_wgs84": [float(coord[1]), float(coord[0]), float(coord[2])],
          "residual_m": float(residual), "alignment_inlier": bool(inlier)}
-        for (pose, row), aligned, gps, residual, inlier in zip(
-            pairs, alignment.transform(visual), gps_enu, alignment.residuals, alignment.inliers
+        for (pose, _row), coord, aligned, gps, residual, inlier in zip(
+            pairs, coordinates, alignment.transform(visual), gps_enu, alignment.residuals, alignment.inliers
         )
     ]
     visual_wgs84 = enu_to_wgs84(alignment.transform(visual), origin)
@@ -76,20 +102,46 @@ def align_sparse(model: Path, synchronized: Path, output: Path, threshold_m: flo
              "geometry": {"type": "LineString", "coordinates": visual_wgs84.tolist()}},
             {"type": "Feature", "properties": {"trajectory": "gps_supplied"},
              "geometry": {"type": "LineString", "coordinates": [
-                 [float(row["longitude"]), float(row["latitude"]), float(row["altitude"])]
-                 for _, row in pairs]}},
+                 [float(coord[1]), float(coord[0]), float(coord[2])]
+                 for coord in coordinates]}},
         ],
     }
     (output / "trajectory.geojson").write_text(
         json.dumps(trajectory_geojson, indent=2), encoding="utf-8")
     metrics = alignment.metrics()
-    metrics.update({"registered_images": len(result.poses), "sparse_points": count,
+    centered_gps = gps_enu - np.mean(gps_enu, axis=0)
+    singular = np.linalg.svd(centered_gps, compute_uv=False)
+    metrics.update({
+                    "telemetry_matched_fraction": len(gps_by_name) / len(rows) if rows else 0.0,
+                    "trajectory_length_m": trajectory_length,
+                    "endpoint_displacement_m": displacement,
+                    "horizontal_span_m": float(np.ptp(gps_enu[:, 0:2], axis=0).max()),
+                    "vertical_span_m": float(np.ptp(gps_enu[:, 2])),
+                    "trajectory_second_to_first_singular_ratio":
+                        float(singular[1] / singular[0]) if singular[0] > 0 else 0.0,
+                    "registered_images": len(result.poses), "sparse_points": count,
                     "sfm_observations": result.observations,
                     "mean_track_length": result.mean_track_length,
-                    "mean_reprojection_error_px": result.mean_reprojection_error_px})
+                    "mean_reprojection_error_px": result.mean_reprojection_error_px,
+                    "median_triangulation_angle_deg":
+                        result.median_triangulation_angle_deg,
+                    "p10_triangulation_angle_deg":
+                        result.p10_triangulation_angle_deg,
+                    "low_angle_point_fraction": result.low_angle_point_fraction})
+    if metrics["rmse_m"] > max_alignment_rmse_m:
+        raise ValueError(
+            f"GPS alignment RMSE {metrics['rmse_m']:.2f} m exceeds "
+            f"the configured {max_alignment_rmse_m:.2f} m limit"
+        )
     reference = {
         "coordinate_frame": "local ENU meters",
-        "altitude_assumption": "Input altitude treated as WGS84 ellipsoidal meters",
+        "input_altitude_datum": altitude_datum,
+        "geoid_separation_m": geoid_separation_m,
+        "altitude_assumption": (
+            "Input ellipsoidal altitude used directly"
+            if altitude_datum == "ellipsoidal"
+            else "Orthometric altitude converted with configured geoid separation"
+        ),
         "origin_wgs84": {"latitude": origin[0], "longitude": origin[1], "altitude": origin[2]},
         "scale": alignment.scale,
         "rotation": alignment.rotation.tolist(),

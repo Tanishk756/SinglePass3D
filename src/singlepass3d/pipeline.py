@@ -64,6 +64,12 @@ def reconstruct_visual(video: Path, output: Path, config: PipelineConfig,
         len(sparse.poses) >= config.reconstruction.min_registered_images
         and registered_fraction >= config.reconstruction.min_registered_fraction
         and sparse.point_count >= config.reconstruction.min_sparse_points
+        and sparse.median_triangulation_angle_deg is not None
+        and sparse.median_triangulation_angle_deg
+            >= config.reconstruction.min_median_triangulation_angle_deg
+        and sparse.mean_reprojection_error_px is not None
+        and sparse.mean_reprojection_error_px
+            <= config.reconstruction.max_mean_reprojection_error_px
     )
     metrics: dict = {
         "coordinate_frame": "COLMAP arbitrary units",
@@ -73,14 +79,21 @@ def reconstruct_visual(video: Path, output: Path, config: PipelineConfig,
         "quality_gate": {"passed": quality_pass,
                          "minimum_registered_images": config.reconstruction.min_registered_images,
                          "minimum_registered_fraction": config.reconstruction.min_registered_fraction,
-                         "minimum_sparse_points": config.reconstruction.min_sparse_points},
+                         "minimum_sparse_points": config.reconstruction.min_sparse_points,
+                         "minimum_median_triangulation_angle_deg":
+                             config.reconstruction.min_median_triangulation_angle_deg,
+                         "maximum_mean_reprojection_error_px":
+                             config.reconstruction.max_mean_reprojection_error_px},
         "capture_quality": json.loads((root / "quality/capture_quality.json").read_text(encoding="utf-8")),
         "sfm": {"input_images": len(images), "registered_images": len(sparse.poses),
                 "registered_fraction": registered_fraction,
                 "sparse_points": sparse.point_count,
                 "observations": sparse.observations,
                 "mean_track_length": sparse.mean_track_length,
-                "mean_reprojection_error_px": sparse.mean_reprojection_error_px},
+                "mean_reprojection_error_px": sparse.mean_reprojection_error_px,
+                "median_triangulation_angle_deg": sparse.median_triangulation_angle_deg,
+                "p10_triangulation_angle_deg": sparse.p10_triangulation_angle_deg,
+                "low_angle_point_fraction": sparse.low_angle_point_fraction},
     }
     if not quality_pass:
         reports = ensure_output(root / "reports")
@@ -146,6 +159,9 @@ def build_report(root: Path) -> Path:
             "blur_rejections": sum(row["rejection_reason"] == "blur" for row in frames),
             "exposure_rejections": sum(row["rejection_reason"] == "exposure" for row in frames),
             "motion_rejections": sum(row["rejection_reason"] == "low_motion" for row in frames),
+            "near_duplicate_rejections": sum(
+                row["rejection_reason"] == "near_duplicate" for row in frames
+            ),
         },
         "sfm": {
             "registered_images": len(sparse.poses),
@@ -153,6 +169,9 @@ def build_report(root: Path) -> Path:
             "observations": sparse.observations,
             "mean_track_length": sparse.mean_track_length,
             "mean_reprojection_error_px": sparse.mean_reprojection_error_px,
+            "median_triangulation_angle_deg": sparse.median_triangulation_angle_deg,
+            "p10_triangulation_angle_deg": sparse.p10_triangulation_angle_deg,
+            "low_angle_point_fraction": sparse.low_angle_point_fraction,
         },
         "gps_alignment": alignment,
     }
@@ -187,11 +206,12 @@ def build_report(root: Path) -> Path:
     pretty = escape(json.dumps(report, indent=2))
     page.write_text(
         "<!doctype html><html lang='en'><meta charset='utf-8'>"
-        "<title>SinglePass3D processing report</title>"
+        "<title>SinglePass3D Reconstruction Report</title>"
         "<style>body{font:16px system-ui;max-width:900px;margin:3rem auto;"
-        "padding:0 1rem}pre{white-space:pre-wrap;background:#f2f4f6;padding:1rem}</style>"
-        "<h1>SinglePass3D processing report</h1>"
-        "<p>GPS residuals measure alignment fit, not absolute survey accuracy.</p>"
+        "padding:0 1rem;background:#0d131f;color:#e8f0ff}pre{white-space:pre-wrap;background:#151e30;padding:1rem;color:#7ee787;border-radius:8px}"
+        "h1{color:#38bdf8}h2{color:#a78bfa}</style>"
+        "<h1>SinglePass3D Reconstruction Report</h1>"
+        "<p>Quality metrics describe internal reconstruction and alignment consistency. Validate absolute accuracy with independent surveyed checkpoints.</p>"
         f"<pre>{pretty}</pre></html>",
         encoding="utf-8",
     )
@@ -270,7 +290,13 @@ def reconstruct(video: Path, telemetry: Path, output: Path,
     registered_fraction = len(sparse_result.poses) / len(images)
     if (len(sparse_result.poses) < config.reconstruction.min_registered_images
             or registered_fraction < config.reconstruction.min_registered_fraction
-            or sparse_result.point_count < config.reconstruction.min_sparse_points):
+            or sparse_result.point_count < config.reconstruction.min_sparse_points
+            or sparse_result.median_triangulation_angle_deg is None
+            or sparse_result.median_triangulation_angle_deg
+                < config.reconstruction.min_median_triangulation_angle_deg
+            or sparse_result.mean_reprojection_error_px is None
+            or sparse_result.mean_reprojection_error_px
+                > config.reconstruction.max_mean_reprojection_error_px):
         raise ValueError(
             "Reconstruction quality gate failed: "
             f"{len(sparse_result.poses)}/{len(images)} images registered and "
@@ -280,7 +306,14 @@ def reconstruct(video: Path, telemetry: Path, output: Path,
     def align_action() -> list[Path]:
         from .geoexport import align_sparse
         destination = root / "geospatial"
-        align_sparse(model_files[0].parent, synchronized, destination)
+        align_sparse(
+            model_files[0].parent, synchronized, destination,
+            threshold_m=config.gps.ransac_threshold_m,
+            altitude_datum=config.gps.altitude_datum,
+            geoid_separation_m=config.gps.geoid_separation_m,
+            min_trajectory_length_m=config.gps.min_trajectory_length_m,
+            max_alignment_rmse_m=config.gps.max_alignment_rmse_m,
+        )
         return [destination / name for name in
                 ("sparse_georeferenced.ply", "camera_poses.json", "trajectory.geojson", "reference.json", "metrics.json")]
     alignment_files = run_stage(
@@ -353,7 +386,8 @@ def reconstruct_full(video: Path, telemetry: Path, output: Path,
                 def mesh_action() -> list[Path]:
                     generate_mesh(cloud_files[1], root / "mesh", config.mesh.depth,
                                   config.mesh.min_points, config.mesh.density_quantile)
-                    return [root / "mesh/scene.obj", root / "mesh/scene.glb",
+                    return [root / "mesh/scene.obj", root / "mesh/scene.ply",
+                        root / "mesh/scene.glb",
                             root / "mesh/metrics.json"]
                 run_stage(
                     root, "mesh", 1, config.digest_for("mesh"),

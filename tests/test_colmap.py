@@ -51,3 +51,15 @@ def test_feature_extractor_receives_camera_and_mask_settings(tmp_path, monkeypat
     assert features[features.index("--FeatureExtraction.use_gpu") + 1] == "0"
     matcher = calls[1]
     assert matcher[matcher.index("--FeatureMatching.use_gpu") + 1] == "0"
+
+
+def test_sparse_reader_reports_triangulation_angle(tmp_path):
+    (tmp_path / "images.txt").write_text(
+        "1 1 0 0 0 0 0 0 1 left.jpg\n0 0 -1\n"
+        "2 1 0 0 0 -2 0 0 1 right.jpg\n0 0 -1\n", encoding="utf-8")
+    (tmp_path / "points3D.txt").write_text(
+        "1 1 0 10 255 255 255 0.2 1 0 2 0\n", encoding="utf-8")
+    result = read_sparse_text(tmp_path)
+    assert result.median_triangulation_angle_deg is not None
+    assert 11 < result.median_triangulation_angle_deg < 12
+    assert result.low_angle_point_fraction == 0

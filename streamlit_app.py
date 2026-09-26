@@ -16,7 +16,9 @@ from singlepass3d.app_runtime import (
     safe_stem,
     save_upload_stream,
     start_job,
+    write_runtime_config,
 )
+from singlepass3d.video import capture_stream
 
 ROOT = Path(__file__).resolve().parent
 OUTPUT = ROOT / "data/output"
@@ -26,24 +28,24 @@ PROFILE_FILES = {
     "Quality": "quality.yaml",
     "Advanced": "advanced.yaml",
 }
-STAGE_LABELS = {
-    "inspect_video": "Inspect",
-    "extract_frames": "Frames",
-    "sync_telemetry": "Sync",
-    "capture_preflight": "Preflight",
-    "dynamic_masks": "Mask",
-    "sparse": "Sparse 3D",
-    "align_sparse": "Georeference",
-    "relative_depth": "AI depth",
-    "dense": "Dense 3D",
-    "pointcloud": "Clean cloud",
-    "mesh": "Mesh",
-    "report": "Report",
+STAGES = {
+    "inspect_video": "Inspecting source",
+    "extract_frames": "Selecting frames",
+    "sync_telemetry": "Synchronizing telemetry",
+    "capture_preflight": "Checking parallax",
+    "dynamic_masks": "Masking motion",
+    "sparse": "Solving cameras",
+    "align_sparse": "Aligning metric frame",
+    "relative_depth": "Estimating depth",
+    "dense": "Fusing dense geometry",
+    "pointcloud": "Cleaning point cloud",
+    "mesh": "Building surface",
+    "report": "Finalizing report",
 }
 
 st.set_page_config(
-    page_title="SinglePass3D Studio",
-    page_icon=":material/deployed_code:",
+    page_title="SinglePass3D",
+    page_icon=":material/view_in_ar:",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -52,210 +54,287 @@ st.session_state.setdefault("viewer_pid", None)
 
 st.markdown("""
 <style>
-:root { --ink:#e8f0ff; --muted:#91a4bf; --cyan:#4de8ff; --violet:#8b7cff; }
-.stApp { background:
-  radial-gradient(circle at 78% 0%, rgba(64,78,180,.18), transparent 34rem),
-  radial-gradient(circle at 10% 20%, rgba(0,183,210,.10), transparent 30rem),
-  #070b13; color:var(--ink); }
-[data-testid="stSidebar"] { background:#0c1220; border-right:1px solid #1f2d43; }
-[data-testid="stHeader"] { background:rgba(7,11,19,.72); }
-.block-container { max-width:1500px; padding-top:2rem; }
-.hero { padding:2.4rem 2.5rem; border:1px solid rgba(111,153,213,.25);
-  border-radius:24px; background:linear-gradient(130deg,rgba(19,34,58,.88),rgba(10,15,27,.72));
-  box-shadow:0 24px 80px rgba(0,0,0,.28); margin-bottom:1.4rem; }
-.eyebrow { color:var(--cyan); letter-spacing:.16em; font-size:.72rem; font-weight:800; }
-.hero h1 { font-size:clamp(2.5rem,5vw,5.2rem); line-height:.96; margin:.55rem 0 1rem;
-  letter-spacing:-.055em; background:linear-gradient(90deg,#fff 5%,#9befff 52%,#a89fff);
-  -webkit-background-clip:text; color:transparent; }
-.hero p { color:#a9bad0; font-size:1.05rem; max-width:760px; line-height:1.65; }
-.pills { display:flex; flex-wrap:wrap; gap:.55rem; margin-top:1.35rem; }
-.pill { border:1px solid #2b4565; background:#101b2b; border-radius:99px;
-  color:#bcd2eb; padding:.42rem .72rem; font-size:.78rem; }
-.metric-strip { display:grid; grid-template-columns:repeat(4,1fr); gap:.75rem; margin:1rem 0 1.6rem; }
-.metric-box { border:1px solid #20324a; border-radius:16px; padding:1rem 1.1rem;
-  background:rgba(12,20,34,.76); }
-.metric-box b { display:block; font-size:1.35rem; color:#fff; }
-.metric-box span { color:#7f94af; font-size:.75rem; }
-div[data-testid="stVerticalBlockBorderWrapper"] { border-color:#20324a; border-radius:18px; }
-.stButton button, .stDownloadButton button { border-radius:10px; font-weight:700; }
-.stProgress > div > div > div { background:linear-gradient(90deg,var(--cyan),var(--violet)); }
-.stage-line { color:#91a4bf; font-family:ui-monospace,monospace; font-size:.78rem; }
-@media(max-width:800px){.metric-strip{grid-template-columns:repeat(2,1fr)}.hero{padding:1.5rem}}
+.stApp{background:#080c13;color:#edf4ff}
+[data-testid="stSidebar"]{background:#0d1420;border-right:1px solid #223047}
+[data-testid="stHeader"]{background:rgba(8,12,19,.85)}
+.block-container{max-width:1320px;padding-top:2.2rem}
+.title{display:flex;align-items:center;gap:.8rem;margin-bottom:.25rem}
+.mark{width:36px;height:36px;border:1px solid #4de8ff;border-radius:10px;
+display:grid;place-items:center;color:#4de8ff;box-shadow:0 0 24px #4de8ff22}
+.title h1{font-size:2rem;letter-spacing:-.04em;margin:0}
+.subtitle{color:#8fa3bd;margin:0 0 2rem 3rem}
+.step{font:700 .72rem ui-monospace;color:#4de8ff;letter-spacing:.12em}
+div[data-testid="stVerticalBlockBorderWrapper"]{border-color:#223047;border-radius:16px}
+.stButton button,.stDownloadButton button{border-radius:10px;font-weight:700}
+.stProgress>div>div>div{background:linear-gradient(90deg,#4de8ff,#8a7dff)}
+.truth{padding:.8rem 1rem;border-left:2px solid #4de8ff;background:#101a28;
+color:#9fb1c8;font-size:.8rem;border-radius:0 8px 8px 0}
 </style>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-<section class="hero">
-  <div class="eyebrow">VIDEO → MEASURABLE 3D</div>
-  <h1>SinglePass3D</h1>
-  <p>Turn one moving-camera flight into georeferenced point clouds, camera trajectories,
-  AI-assisted depth evidence, and exportable 3D surfaces—all on your workstation.</p>
-  <div class="pills">
-    <span class="pill">GPU accelerated</span><span class="pill">Metric ENU output</span>
-    <span class="pill">Dynamic-object masking</span><span class="pill">Capture diagnostics</span>
-    <span class="pill">PLY · OBJ · GLB</span>
-  </div>
-</section>
-<div class="metric-strip">
-  <div class="metric-box"><b>1.38M</b><span>REFERENCE FUSED POINTS</span></div>
-  <div class="metric-box"><b>35 / 35</b><span>REGISTERED FRAMES</span></div>
-  <div class="metric-box"><b>0.89 px</b><span>REPROJECTION ERROR</span></div>
-  <div class="metric-box"><b>547K</b><span>MESH TRIANGLES</span></div>
-</div>
+<div class="title"><div class="mark">3D</div><h1>SinglePass3D</h1></div>
+<p class="subtitle">Video and live-feed reconstruction workspace</p>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
-    st.markdown("### Reconstruction console")
-    st.caption("Local processing · files stay on this machine")
-    st.success("Reconstruction stack ready", icon=":material/check_circle:")
-    st.markdown("**Hardware**  \nNVIDIA GeForce RTX 2060")
-    st.markdown("**Engine**  \nCOLMAP · OpenCV · Open3D · PyTorch")
+    st.markdown("### Mission")
+    st.caption("One source. One configuration. One complete pipeline.")
     st.divider()
-    st.markdown("#### Output truth")
-    st.caption("Observed clouds, inferred surfaces, and alignment residuals are labeled separately.")
-    st.info("Use telemetry for meter-scale output. Video-only output remains in arbitrary units.",
-            icon=":material/info:")
+    st.markdown("**Accuracy policy**")
+    st.caption(
+        "A mission is accepted only when camera registration, reprojection error, "
+        "triangulation angle, and metric alignment pass configured gates."
+    )
+    st.markdown(
+        "<div class='truth'>Point clouds are observed geometry. Filled surfaces and "
+        "monocular depth are identified as inferred products.</div>",
+        unsafe_allow_html=True,
+    )
 
-left, right = st.columns([1.08, .92], gap="large")
-with left:  # noqa: SIM117
-    with st.container(border=True):
-        st.subheader("01 · Add flight data")
+source_col, settings_col = st.columns([1.05, .95], gap="large")
+
+with source_col, st.container(border=True):
+    st.markdown("<span class='step'>01 / SOURCE</span>", unsafe_allow_html=True)
+    source_mode = st.segmented_control(
+        "Input", ["Video upload", "Live feed"], default="Video upload"
+    )
+    video = None
+    live_source = ""
+    live_duration = 15
+    if source_mode == "Video upload":
         video = st.file_uploader(
-            "Video", type=sorted(x.lstrip(".") for x in VIDEO_EXTENSIONS),
-            help="Original MP4 or MOV with forward/sideways translation and stable overlap")
+            "Video",
+            type=sorted(value.lstrip(".") for value in VIDEO_EXTENSIONS),
+            help="Use an original MP4 or MOV with translation and stable overlap.",
+        )
         if video is not None:
             st.video(video)
-            st.caption(f"{video.name} · {video.size / 1_048_576:.1f} MB")
-        telemetry = st.file_uploader(
-            "Position telemetry", type=sorted(x.lstrip(".") for x in TELEMETRY_EXTENSIONS),
-            help="CSV or JSON with timestamp, latitude, longitude and altitude")
-        with st.form("reconstruction"):
-            mode = st.segmented_control(
-                "Coordinate mode", ["Metric + georeferenced", "Visual reconstruction"],
-                default="Metric + georeferenced")
-            profile = st.segmented_control(
-                "Processing profile", list(PROFILE_FILES), default="Advanced", key="profile")
-            product = st.segmented_control(
-                "Product", ["Sparse preview", "Dense cloud + mesh"],
-                default="Dense cloud + mesh", key="product")
-            mission_name = st.text_input("Mission name", value="flight")
-            start_time = st.text_input(
-                "Video frame-zero UTC", placeholder="2026-09-25T10:30:00Z",
-                help="Required for telemetry synchronization")
-            submitted = st.form_submit_button(
-                "Build reconstruction", type="primary", icon=":material/play_arrow:",
-                disabled=video is None, use_container_width=True)
+            st.caption(f"{video.name} | {video.size / 1_048_576:.1f} MB")
+    else:
+        live_source = st.text_input(
+            "Camera or stream source",
+            placeholder="0 or rtsp://camera/stream",
+            help="Use a webcam index, RTSP URL, or HTTP video stream.",
+        )
+        live_duration = st.number_input(
+            "Capture window (seconds)", min_value=2, max_value=3600, value=15
+        )
+        st.info(
+            "Frames are captured for the selected window, then jointly optimized. "
+            "This preserves bundle-adjustment accuracy.",
+            icon=":material/videocam:",
+        )
+    telemetry = st.file_uploader(
+        "Position telemetry",
+        type=sorted(value.lstrip(".") for value in TELEMETRY_EXTENSIONS),
+        help="Optional for visual 3D. Required for georeferenced meters.",
+    )
 
-with right:
-    with st.container(border=True):
-        st.subheader("02 · Processing plan")
-        plan = [
-            ("Capture intelligence", "Blur, exposure, feature motion and parallax risk"),
-            ("Visual geometry", "SIFT matching, camera registration and bundle adjustment"),
-            ("Metric alignment", "Robust GPS synchronization and local ENU transform"),
-            ("Dense scene", "Multi-view stereo, filtering and AI depth evidence"),
-            ("3D delivery", "Point cloud, colored mesh, report and measurement viewer"),
-        ]
-        for index, (title, detail) in enumerate(plan, 1):
-            st.markdown(f"**{index:02d}  {title}**  \n<span style='color:#8296b2'>{detail}</span>",
-                        unsafe_allow_html=True)
-    with st.container(border=True):
-        st.subheader("Live experience")
-        st.markdown("The public showcase includes a browser-based **live 2D vision preview** "
-                    "while video plays. Full 3D uses GPU batch stages and streams progress here.")
-        st.link_button("Open public showcase", "https://tanishk756.github.io/SinglePass3D/",
-                       icon=":material/open_in_new:", use_container_width=True)
+with settings_col, st.container(border=True):
+    st.markdown("<span class='step'>02 / CALIBRATION</span>", unsafe_allow_html=True)
+    coordinate_mode = st.segmented_control(
+        "Coordinates",
+        ["Metric + georeferenced", "Visual scale"],
+        default="Metric + georeferenced",
+    )
+    profile = st.select_slider(
+        "Processing", options=list(PROFILE_FILES), value="Advanced"
+    )
+    output_product = st.segmented_control(
+        "Output",
+        ["Sparse preview", "Dense cloud + mesh"],
+        default="Dense cloud + mesh",
+    )
+    mission_name = st.text_input("Mission name", value="mission")
+    start_time = st.text_input(
+        "Frame-zero UTC",
+        placeholder="2026-09-26T10:30:00+05:30",
+        help="Required when position telemetry is supplied.",
+    )
+    with st.expander("Camera and altitude calibration"):
+        camera_model = st.selectbox(
+            "Camera model",
+            [
+                "SIMPLE_RADIAL",
+                "PINHOLE",
+                "SIMPLE_PINHOLE",
+                "RADIAL",
+                "OPENCV",
+                "FULL_OPENCV",
+                "OPENCV_FISHEYE",
+            ],
+        )
+        camera_parameters = st.text_input(
+            "Calibrated parameters",
+            placeholder="Leave empty to estimate, or enter model parameters",
+            help="Comma-separated COLMAP parameters in the selected model's order.",
+        )
+        altitude_datum = st.radio(
+            "Altitude datum", ["Ellipsoidal", "Orthometric"], horizontal=True
+        )
+        geoid_separation = None
+        if altitude_datum == "Orthometric":
+            geoid_separation = st.number_input(
+                "Geoid separation N (m)",
+                value=0.0,
+                help="Ellipsoidal height h = orthometric height H + N.",
+            )
+    disabled = source_mode == "Video upload" and video is None
+    submitted = st.button(
+        "Generate 3D model",
+        type="primary",
+        icon=":material/play_arrow:",
+        disabled=disabled,
+        use_container_width=True,
+    )
 
-if submitted and video is not None:
+if submitted:
     try:
+        if source_mode == "Live feed" and not live_source.strip():
+            raise ValueError("Enter a webcam index or stream URL.")
+        if coordinate_mode == "Metric + georeferenced" and telemetry is None:
+            raise ValueError("Metric coordinates require position telemetry.")
+        if telemetry is not None and not start_time.strip():
+            raise ValueError("Telemetry synchronization requires frame-zero UTC.")
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         mission = OUTPUT / f"{safe_stem(mission_name)}-{stamp}"
         input_dir = mission / "input"
-        video_path = save_upload_stream(video, video.name, input_dir, VIDEO_EXTENSIONS)
+        if source_mode == "Video upload":
+            video_path = save_upload_stream(
+                video, video.name, input_dir, VIDEO_EXTENSIONS
+            )
+        else:
+            with st.spinner("Capturing live source..."):
+                video_path = capture_stream(
+                    live_source,
+                    input_dir / "live-capture.mp4",
+                    float(live_duration),
+                    max_dimension=None,
+                )
         telemetry_path = None
         if telemetry is not None:
             telemetry_path = save_upload_stream(
-                telemetry, telemetry.name, input_dir, TELEMETRY_EXTENSIONS)
-        metric_mode = mode == "Metric + georeferenced"
-        if metric_mode and telemetry_path is None:
-            raise ValueError("Metric mode requires position telemetry.")
-        if metric_mode and not start_time.strip():
-            raise ValueError("Metric mode requires video frame-zero UTC.")
-        if profile == "Advanced" and telemetry_path is None:
-            raise ValueError("Advanced profile requires telemetry for validated metric output.")
+                telemetry, telemetry.name, input_dir, TELEMETRY_EXTENSIONS
+            )
+        config_path = write_runtime_config(
+            ROOT / "configs" / PROFILE_FILES[profile],
+            mission / "mission-config.yaml",
+            camera_model,
+            camera_parameters or None,
+            altitude_datum.lower(),
+            float(geoid_separation) if geoid_separation is not None else None,
+        )
+        full = output_product == "Dense cloud + mesh" or profile == "Advanced"
         command = reconstruction_command(
-            video_path, mission, ROOT / "configs" / PROFILE_FILES[profile],
-            product == "Dense cloud + mesh" or profile == "Advanced",
-            telemetry_path, start_time.strip() or None)
+            video_path,
+            mission,
+            config_path,
+            full,
+            telemetry_path,
+            start_time.strip() or None,
+        )
         start_job(command, mission)
         st.session_state.mission = str(mission)
-        st.toast("Reconstruction started", icon=":material/rocket_launch:")
+        st.toast("Mission started", icon=":material/rocket_launch:")
     except (OSError, ValueError) as exc:
         st.error(str(exc), icon=":material/error:")
 
 
 @st.fragment(run_every="2s" if st.session_state.mission else None)
-def monitor() -> None:
+def mission_status() -> None:
     st.markdown("---")
-    st.subheader("Mission telemetry", icon=":material/monitoring:")
+    st.markdown("<span class='step'>03 / RECONSTRUCTION</span>", unsafe_allow_html=True)
     if not st.session_state.mission:
-        st.caption("A mission timeline will appear here after upload.")
+        st.caption("Configure a source and start the mission.")
         return
     mission = Path(st.session_state.mission)
     status = job_status(mission)
-    stages = status["checkpoints"]
-    stage_text = "  →  ".join(STAGE_LABELS.get(stage, stage) for stage in stages)
-    total = 12
-    st.progress(min(len(stages) / total, 1.0),
-                text=STAGE_LABELS.get(stages[-1], stages[-1]) if stages else "Starting")
-    st.markdown(f"<div class='stage-line'>{stage_text or 'Waiting for worker'}</div>",
-                unsafe_allow_html=True)
-    a, b, c = st.columns(3)
-    a.metric("Completed stages", f"{len(stages)} / {total}")
-    b.metric("State", "Running" if status["running"] else
-             "Complete" if status["complete"] else "Needs attention")
-    b.caption(mission.name)
+    completed = status["checkpoints"]
+    current = STAGES.get(completed[-1], completed[-1]) if completed else "Starting"
+    st.progress(min(len(completed) / len(STAGES), 1.0), text=current)
+    state_col, stage_col, name_col = st.columns(3)
+    state_col.metric(
+        "State",
+        "Running" if status["running"] else
+        "Complete" if status["complete"] else "Stopped",
+    )
+    stage_col.metric("Stages", f"{len(completed)} / {len(STAGES)}")
+    name_col.metric("Mission", mission.name)
+
     metrics_path = mission / "reports/metrics.json"
-    if metrics_path.is_file():
-        metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
-        sfm = metrics.get("sfm", {})
-        c.metric("Registered cameras", sfm.get("registered_images", "—"))
     if status["failed"]:
-        st.error("Processing stopped. The diagnostic log below contains the exact cause.",
-                 icon=":material/error:")
+        st.error("The mission did not pass. Review the engineering log.", icon=":material/error:")
     if status["complete"] and metrics_path.is_file():
         metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
-        sfm, dense, mesh = metrics.get("sfm", {}), metrics.get("dense", {}), metrics.get("mesh", {})
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Sparse points", f"{sfm.get('sparse_points', 0):,}")
-        m2.metric("Dense points", f"{dense.get('processed_points', 0):,}")
-        m3.metric("Triangles", f"{mesh.get('triangles', 0):,}")
-        error = sfm.get("mean_reprojection_error_px")
-        m4.metric("Reprojection", f"{error:.2f} px" if isinstance(error, (int, float)) else "—")
+        sfm = metrics.get("sfm", {})
+        alignment = metrics.get("gps_alignment", {})
+        dense = metrics.get("dense", {})
+        mesh = metrics.get("mesh", {})
+        st.success("Quality gates passed", icon=":material/check_circle:")
+        a, b, c, d = st.columns(4)
+        a.metric("Registered cameras", sfm.get("registered_images", "n/a"))
+        reprojection = sfm.get("mean_reprojection_error_px")
+        b.metric(
+            "Reprojection",
+            f"{reprojection:.3f} px" if isinstance(reprojection, (int, float)) else "n/a",
+        )
+        angle = sfm.get("median_triangulation_angle_deg")
+        c.metric(
+            "Triangulation",
+            f"{angle:.2f} deg" if isinstance(angle, (int, float)) else "n/a",
+        )
+        rmse = alignment.get("rmse_m")
+        d.metric(
+            "GPS fit",
+            f"{rmse:.2f} m" if isinstance(rmse, (int, float)) else "visual scale",
+        )
+        a, b, c = st.columns(3)
+        a.metric("Sparse points", f"{sfm.get('sparse_points', 0):,}")
+        b.metric("Filtered points", f"{dense.get('processed_points', 0):,}")
+        c.metric("Mesh triangles", f"{mesh.get('triangles', 0):,}")
+
         downloads = st.container(horizontal=True)
-        downloads.download_button("Metrics JSON", metrics_path.read_bytes(),
-                                  file_name="metrics.json", mime="application/json",
-                                  icon=":material/download:")
-        for candidate in (mission / "mesh/scene.glb", mission / "mesh/scene.obj",
-                          mission / "pointcloud/processed.ply",
-                          mission / "geospatial/sparse_georeferenced.ply",
-                          mission / "geometry/sparse_observed.ply"):
-            if candidate.is_file():
+        downloads.download_button(
+            "Metrics",
+            metrics_path.read_bytes(),
+            file_name="metrics.json",
+            mime="application/json",
+            icon=":material/download:",
+        )
+        for artifact in (
+            mission / "pointcloud/processed.ply",
+            mission / "mesh/scene.glb",
+            mission / "mesh/scene.obj",
+            mission / "geospatial/trajectory.geojson",
+        ):
+            if artifact.is_file():
                 downloads.download_button(
-                    candidate.name, candidate.read_bytes(), file_name=candidate.name,
-                    mime="application/octet-stream", icon=":material/download:",
-                    key=str(candidate))
-        if st.button("Start local 3D viewer", icon=":material/3d_rotation:"):
+                    artifact.name,
+                    artifact.read_bytes(),
+                    file_name=artifact.name,
+                    mime="application/octet-stream",
+                    icon=":material/download:",
+                    key=str(artifact),
+                )
+        if st.button("Open 3D viewer", icon=":material/3d_rotation:"):
             flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
             process = subprocess.Popen(
-                [sys.executable, "-m", "singlepass3d.cli", "viewer", str(mission),
-                 "--port", "8765", "--no-browser"], cwd=ROOT, creationflags=flags)
+                [
+                    sys.executable,
+                    "-m",
+                    "singlepass3d.cli",
+                    "viewer",
+                    str(mission),
+                    "--port",
+                    "8765",
+                    "--no-browser",
+                ],
+                cwd=ROOT,
+                creationflags=flags,
+            )
             st.session_state.viewer_pid = process.pid
         if st.session_state.viewer_pid:
-            st.link_button("Open metric 3D viewer", "http://127.0.0.1:8765",
-                           icon=":material/open_in_new:")
-    with st.expander("Engineering log", icon=":material/terminal:"):
-        st.code(status["log"] or "Worker is starting…", language="text")
+            st.link_button("Launch viewer", "http://127.0.0.1:8765")
+    with st.expander("Engineering log"):
+        st.code(status["log"] or "Worker is starting...", language="text")
 
 
-monitor()
+mission_status()

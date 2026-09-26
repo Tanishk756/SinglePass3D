@@ -1,13 +1,16 @@
-"""Safe filesystem and subprocess helpers for the local web application."""
+﻿"""Safe filesystem and subprocess helpers for the local web application."""
 from __future__ import annotations
 
 import json
+import math
 import re
 import shutil
 import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+
+import yaml
 
 VIDEO_EXTENSIONS = {".mp4", ".mov"}
 TELEMETRY_EXTENSIONS = {".csv", ".json"}
@@ -115,3 +118,46 @@ def job_status(mission: Path) -> dict:
     failed = not running and not complete and bool(state)
     return {**state, "running": running, "complete": complete, "failed": failed,
             "checkpoints": checkpoints, "log": log}
+
+
+def write_runtime_config(
+    base: Path,
+    destination: Path,
+    camera_model: str,
+    camera_parameters: str | None,
+    altitude_datum: str,
+    geoid_separation_m: float | None,
+) -> Path:
+    """Create a mission-specific config without mutating shared profiles."""
+    raw = yaml.safe_load(base.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise TypeError("Base profile must be a YAML mapping")
+    allowed_models = {
+        "SIMPLE_PINHOLE", "PINHOLE", "SIMPLE_RADIAL", "RADIAL",
+        "OPENCV", "FULL_OPENCV", "OPENCV_FISHEYE",
+    }
+    if camera_model not in allowed_models:
+        raise ValueError("Unsupported camera model")
+    parameters = camera_parameters.strip() if camera_parameters else None
+    if parameters:
+        try:
+            values = [float(value.strip()) for value in parameters.split(",")]
+        except ValueError as exc:
+            raise ValueError("Camera parameters must be comma-separated numbers") from exc
+        if not values or any(not math.isfinite(value) for value in values):
+            raise ValueError("Camera parameters must be finite numbers")
+        parameters = ",".join(str(value) for value in values)
+    if altitude_datum not in {"ellipsoidal", "orthometric"}:
+        raise ValueError("Unsupported altitude datum")
+    if altitude_datum == "orthometric" and geoid_separation_m is None:
+        raise ValueError("Orthometric altitude requires geoid separation")
+    raw.setdefault("camera", {})
+    raw["camera"].update({"model": camera_model, "parameters": parameters})
+    raw.setdefault("gps", {})
+    raw["gps"].update({
+        "altitude_datum": altitude_datum,
+        "geoid_separation_m": geoid_separation_m,
+    })
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    return destination

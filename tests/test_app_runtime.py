@@ -7,6 +7,7 @@ from singlepass3d.app_runtime import (
     reconstruction_command,
     safe_stem,
     save_upload,
+    write_runtime_config,
 )
 
 
@@ -41,3 +42,23 @@ def test_failed_quality_gate_is_not_complete(tmp_path: Path):
     status = job_status(tmp_path)
     assert not status["complete"]
     assert status["failed"]
+
+
+def test_runtime_config_is_mission_specific(tmp_path: Path):
+    base = tmp_path / "base.yaml"
+    base.write_text("camera:\n  model: SIMPLE_RADIAL\ngps:\n  sync_method: interpolate\n", encoding="utf-8")
+    output = write_runtime_config(
+        base, tmp_path / "mission.yaml", "PINHOLE", "1000, 1001, 500, 400",
+        "orthometric", 31.2)
+    content = output.read_text(encoding="utf-8")
+    assert "model: PINHOLE" in content
+    assert "1000.0,1001.0,500.0,400.0" in content
+    assert "geoid_separation_m: 31.2" in content
+    assert "SIMPLE_RADIAL" in base.read_text(encoding="utf-8")
+
+
+def test_runtime_config_requires_orthometric_separation(tmp_path: Path):
+    base = tmp_path / "base.yaml"
+    base.write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="geoid separation"):
+        write_runtime_config(base, tmp_path / "out.yaml", "PINHOLE", None, "orthometric", None)

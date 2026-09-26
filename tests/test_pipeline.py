@@ -1,4 +1,4 @@
-import json
+﻿import json
 
 from singlepass3d.pipeline import build_report
 
@@ -23,6 +23,7 @@ def test_report_uses_stage_values(tmp_path):
     page = build_report(tmp_path)
     report = json.loads((tmp_path / "reports/metrics.json").read_text())
     assert report["frame_processing"]["blur_rejections"] == 1
+    assert report["frame_processing"]["near_duplicate_rejections"] == 0
     assert report["sfm"]["sparse_points"] == 1
     assert report["gps_alignment"]["rmse_m"] == 1.2
-    assert "not absolute survey accuracy" in page.read_text()
+    assert "independent surveyed checkpoints" in page.read_text()

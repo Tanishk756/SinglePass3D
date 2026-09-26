@@ -1,6 +1,7 @@
 """Windows-compatible COLMAP command backend and text-model reader."""
 from __future__ import annotations
 
+import math
 import os
 import shutil
 import subprocess
@@ -27,6 +28,9 @@ class SparseResult:
     observations: int
     mean_track_length: float | None
     mean_reprojection_error_px: float | None
+    median_triangulation_angle_deg: float | None = None
+    p10_triangulation_angle_deg: float | None = None
+    low_angle_point_fraction: float | None = None
 
 
 def discover_colmap(configured: str | None = None) -> Path:
@@ -108,10 +112,45 @@ def read_sparse_text(model: Path) -> SparseResult:
     track_lengths = [(len(row) - 8) // 2 for row in point_rows if len(row) >= 8]
     errors = [float(row[7]) for row in point_rows if len(row) >= 8]
     count = len(point_rows)
+    centers = {pose.image_id: pose.center for pose in poses}
+    angles = []
+    for row in point_rows:
+        if len(row) < 12:
+            continue
+        point = tuple(float(value) for value in row[1:4])
+        image_ids = [int(value) for value in row[8::2] if int(value) in centers]
+        maximum = 0.0
+        for left_index, left_id in enumerate(image_ids):
+            left = tuple(centers[left_id][axis] - point[axis] for axis in range(3))
+            left_norm = math.sqrt(sum(value * value for value in left))
+            if left_norm <= 1e-12:
+                continue
+            for right_id in image_ids[left_index + 1:]:
+                right = tuple(centers[right_id][axis] - point[axis] for axis in range(3))
+                right_norm = math.sqrt(sum(value * value for value in right))
+                if right_norm <= 1e-12:
+                    continue
+                cosine = sum(a * b for a, b in zip(left, right)) / (left_norm * right_norm)
+                angle = math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
+                maximum = max(maximum, angle)
+        if maximum > 0:
+            angles.append(maximum)
+    angles.sort()
+    def percentile(values: list[float], fraction: float) -> float | None:
+        if not values:
+            return None
+        position = fraction * (len(values) - 1)
+        lower = int(position)
+        upper = min(lower + 1, len(values) - 1)
+        weight = position - lower
+        return values[lower] * (1 - weight) + values[upper] * weight
     return SparseResult(
         poses, count, observations,
         sum(track_lengths) / count if count else None,
         sum(errors) / count if count else None,
+        percentile(angles, 0.5),
+        percentile(angles, 0.1),
+        (sum(angle < 1.0 for angle in angles) / len(angles)) if angles else None,
     )
 
 
