@@ -53,7 +53,30 @@ A synchronized 1920×1080 reference flight was processed end to end on an RTX 20
 GPS alignment RMSE measures agreement with supplied onboard GPS. Independent survey
 accuracy requires checkpoints, RTK/PPK, or ground control.
 
-## Launch the studio
+## Windows desktop application
+
+The main application runs locally as a native Windows window. Its hidden loopback process
+is only the interface transport; video and telemetry never leave the workstation. COLMAP,
+OpenCV, Open3D, PyTorch, and CUDA execute directly on the installed CPU and GPU.
+
+After setup, build the signed-ready launcher and desktop shortcut:
+
+```powershell
+cd C:\SinglePass3D
+.\setup.ps1 -Full -IncludeCuda
+.\build-desktop.ps1
+```
+
+Launch **SinglePass3D** from the Windows desktop, or run:
+
+```powershell
+.\dist\desktop\SinglePass3D.exe
+```
+
+The static GitHub Pages site remains a lightweight product demonstration and does not run
+the reconstruction engine.
+
+## Development browser mode
 
 Requirements: Windows 11, Python 3.11, FFmpeg, and COLMAP.
 

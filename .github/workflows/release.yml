@@ -15,10 +15,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python -m pip install build
+      - run: python -m pip install build "pywebview>=5,<7" "pyinstaller>=6,<7"
       - run: python -m build
+      - name: Build Windows desktop launcher
+        run: >-
+          python -m PyInstaller --noconfirm --clean --onefile --windowed
+          --name SinglePass3D --distpath dist/desktop --workpath build/desktop
+          --specpath build desktop_app.py
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" dist/* --generate-notes --verify-tag
+        run: gh release create "${{ github.ref_name }}" dist/*.whl dist/*.tar.gz dist/desktop/SinglePass3D.exe --generate-notes --verify-tag
 

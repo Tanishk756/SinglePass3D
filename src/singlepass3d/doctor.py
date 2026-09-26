@@ -47,8 +47,13 @@ def doctor(output: Path) -> list[Check]:
     ffmpeg = _find_ffmpeg()
     checks.append(Check("FFmpeg", "PASS" if ffmpeg else "WARN",
                         ffmpeg or "ffmpeg not found"))
-    colmap = os.environ.get("COLMAP_EXE") or shutil.which("colmap.exe") or shutil.which("colmap")
-    checks.append(Check("COLMAP", "PASS" if colmap and Path(colmap).is_file() else "WARN",
+    try:
+        from .colmap import discover_colmap
+
+        colmap = str(discover_colmap())
+    except (OSError, RuntimeError):
+        colmap = None
+    checks.append(Check("COLMAP", "PASS" if colmap else "WARN",
                         colmap or "COLMAP_EXE/colmap not found"))
     nvidia_smi = shutil.which("nvidia-smi")
     names = []

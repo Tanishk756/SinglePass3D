@@ -1,8 +1,9 @@
-﻿"""Safe filesystem and subprocess helpers for the local web application."""
+"""Safe filesystem and subprocess helpers for the local web application."""
 from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -72,9 +73,29 @@ def reconstruction_command(video: Path, output: Path, config: Path, full: bool,
 def start_job(command: list[str], mission: Path) -> int:
     mission.mkdir(parents=True, exist_ok=True)
     flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    environment = os.environ.copy()
+    logical_cores = os.cpu_count() or 1
+    physical_cores = logical_cores
+    try:
+        import psutil
+
+        physical_cores = psutil.cpu_count(logical=False) or logical_cores
+    except ImportError:
+        pass
+    thread_count = str(max(1, physical_cores))
+    environment.update({
+        "OMP_NUM_THREADS": thread_count,
+        "MKL_NUM_THREADS": thread_count,
+        "OPENBLAS_NUM_THREADS": thread_count,
+        "CUDA_MODULE_LOADING": "LAZY",
+        "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+        "OPENCV_LOG_LEVEL": "ERROR",
+    })
     with (mission / "app-job.log").open("w", encoding="utf-8") as log:
-        process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
-                                   creationflags=flags, cwd=Path(__file__).parents[2])
+        process = subprocess.Popen(
+            command, stdout=log, stderr=subprocess.STDOUT,
+            creationflags=flags, cwd=Path(__file__).parents[2], env=environment,
+        )
     state = {"pid": process.pid, "command": command, "started_at": datetime.now(UTC).isoformat()}
     (mission / "app-job.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
     return process.pid
