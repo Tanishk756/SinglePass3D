@@ -104,35 +104,80 @@ def reconstruct_visual(video: Path, output: Path, config: PipelineConfig,
             f"{sparse.point_count} sparse points. Increase frame overlap or use footage "
             "with translational camera motion before dense reconstruction."
         )
+    reports = ensure_output(root / "reports")
+    (reports / "sparse_metrics.json").write_text(
+        json.dumps(metrics, indent=2), encoding="utf-8"
+    )
     if full:
         from .mvs import reconstruct_dense
-        binary_models = [path.parent for path in (root / "reconstruction/sparse").rglob("images.bin")]
+        binary_models = [
+            path.parent for path in (root / "reconstruction/sparse").rglob("images.bin")
+        ]
         if not binary_models:
             raise ValueError("No binary sparse model is available for dense reconstruction")
-        dense = reconstruct_dense(root / "frames", binary_models[0],
-                                  root / "reconstruction/dense",
-                                  discover_colmap(config.colmap.executable))
+        sparse_model = max(binary_models, key=lambda path: len(list(path.iterdir())))
+        dense_files = run_stage(
+            root, "dense", 1, config.digest_for("colmap"),
+            {**image_ids, **{
+                path.name: file_identifier(path) for path in sparse_model.glob("*.bin")
+            }},
+            lambda: [reconstruct_dense(
+                root / "frames", sparse_model, root / "reconstruction/dense",
+                discover_colmap(config.colmap.executable),
+            )],
+        )
         reference = root / "geometry/arbitrary_reference.json"
-        reference.write_text(json.dumps({"scale": 1.0, "rotation": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-                                         "translation_enu_m": [0, 0, 0]}), encoding="utf-8")
+        reference.write_text(json.dumps({
+            "scale": 1.0,
+            "rotation": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+            "translation_enu_m": [0, 0, 0],
+        }), encoding="utf-8")
         from .pointcloud import process_dense_cloud
-        cloud_metrics = process_dense_cloud(dense, reference, root / "pointcloud",
-                                             config.pointcloud.voxel_size_m,
-                                             config.pointcloud.neighbors,
-                                             config.pointcloud.std_ratio)
-        cloud_metrics["coordinate_frame"] = "COLMAP arbitrary units"
-        cloud_metrics["metric_scale"] = False
-        (root / "pointcloud/metrics.json").write_text(json.dumps(cloud_metrics, indent=2), encoding="utf-8")
-        metrics["dense"] = cloud_metrics
+
+        def cloud_action() -> list[Path]:
+            cloud_metrics = process_dense_cloud(
+                dense_files[0], reference, root / "pointcloud",
+                config.pointcloud.voxel_size_m, config.pointcloud.neighbors,
+                config.pointcloud.std_ratio,
+            )
+            cloud_metrics["coordinate_frame"] = "COLMAP arbitrary units"
+            cloud_metrics["metric_scale"] = False
+            (root / "pointcloud/metrics.json").write_text(
+                json.dumps(cloud_metrics, indent=2), encoding="utf-8"
+            )
+            return [
+                root / "pointcloud/raw.ply", root / "pointcloud/processed.ply",
+                root / "pointcloud/metrics.json",
+            ]
+
+        cloud_files = run_stage(
+            root, "pointcloud", 1, config.digest_for("pointcloud"),
+            {"dense": file_identifier(dense_files[0])}, cloud_action,
+        )
+        metrics["dense"] = json.loads(cloud_files[2].read_text(encoding="utf-8"))
         if config.reconstruction.mesh:
             from .mesh import generate_mesh
-            mesh_metrics = generate_mesh(root / "pointcloud/processed.ply", root / "mesh",
-                                         config.mesh.depth, config.mesh.min_points,
-                                         config.mesh.density_quantile)
-            mesh_metrics["coordinate_frame"] = "COLMAP arbitrary units"
-            mesh_metrics["metric_scale"] = False
-            (root / "mesh/metrics.json").write_text(json.dumps(mesh_metrics, indent=2), encoding="utf-8")
-            metrics["mesh"] = mesh_metrics
+
+            def mesh_action() -> list[Path]:
+                mesh_metrics = generate_mesh(
+                    cloud_files[1], root / "mesh", config.mesh.depth,
+                    config.mesh.min_points, config.mesh.density_quantile,
+                )
+                mesh_metrics["coordinate_frame"] = "COLMAP arbitrary units"
+                mesh_metrics["metric_scale"] = False
+                (root / "mesh/metrics.json").write_text(
+                    json.dumps(mesh_metrics, indent=2), encoding="utf-8"
+                )
+                return [
+                    root / "mesh/scene.obj", root / "mesh/scene.ply",
+                    root / "mesh/scene.glb", root / "mesh/metrics.json",
+                ]
+
+            mesh_files = run_stage(
+                root, "mesh", 1, config.digest_for("mesh"),
+                {"cloud": file_identifier(cloud_files[1])}, mesh_action,
+            )
+            metrics["mesh"] = json.loads(mesh_files[-1].read_text(encoding="utf-8"))
     reports = ensure_output(root / "reports")
     report = reports / "metrics.json"
     report.write_text(json.dumps(metrics, indent=2), encoding="utf-8")

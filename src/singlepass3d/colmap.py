@@ -62,13 +62,16 @@ def run_colmap(executable: Path, arguments: list[str], log: Path) -> None:
         if plugins.is_dir():
             environment["QT_PLUGIN_PATH"] = str(plugins)
     try:
-        result = subprocess.run(command, capture_output=True, text=True,
-                                check=False, timeout=None, env=environment)
+        with log.open("w", encoding="utf-8", buffering=1) as stream:
+            process = subprocess.Popen(
+                command, stdout=stream, stderr=subprocess.STDOUT,
+                text=True, env=environment,
+            )
+            returncode = process.wait()
     except OSError as exc:
         raise PipelineError("colmap", str(exc), "Verify the COLMAP executable path") from exc
-    log.write_text(result.stdout + "\n" + result.stderr, encoding="utf-8")
-    if result.returncode != 0:
-        raise PipelineError("colmap", f"{arguments[0]} exited {result.returncode}",
+    if returncode != 0:
+        raise PipelineError("colmap", f"{arguments[0]} exited {returncode}",
                             f"Inspect {log} and verify image overlap and camera settings")
 
 
@@ -186,9 +189,12 @@ def reconstruct_sparse(images: Path, output: Path, executable: Path,
                             "--SequentialMatching.overlap", str(overlap),
                             "--FeatureMatching.use_gpu", str(int(use_gpu))],
                output / "sequential_matcher.log")
-    run_colmap(executable, ["mapper", "--database_path", str(database),
-                            "--image_path", str(images), "--output_path", str(sparse)],
-               output / "mapper.log")
+    run_colmap(executable, [
+        "mapper", "--database_path", str(database),
+        "--image_path", str(images), "--output_path", str(sparse),
+        "--Mapper.num_threads", "-1",
+        "--Mapper.ba_use_gpu", str(int(use_gpu)),
+    ], output / "mapper.log")
     models = [item for item in sparse.iterdir() if item.is_dir()]
     if not models:
         raise PipelineError("colmap", "Mapper registered no image model",

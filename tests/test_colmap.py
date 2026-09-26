@@ -51,6 +51,9 @@ def test_feature_extractor_receives_camera_and_mask_settings(tmp_path, monkeypat
     assert features[features.index("--FeatureExtraction.use_gpu") + 1] == "0"
     matcher = calls[1]
     assert matcher[matcher.index("--FeatureMatching.use_gpu") + 1] == "0"
+    mapper = calls[2]
+    assert mapper[mapper.index("--Mapper.num_threads") + 1] == "-1"
+    assert mapper[mapper.index("--Mapper.ba_use_gpu") + 1] == "0"
 
 
 def test_sparse_reader_reports_triangulation_angle(tmp_path):

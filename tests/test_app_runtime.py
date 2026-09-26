@@ -3,10 +3,12 @@ from pathlib import Path
 import pytest
 
 from singlepass3d.app_runtime import (
+    active_missions,
     job_status,
     reconstruction_command,
     safe_stem,
     save_upload,
+    start_job,
     write_runtime_config,
 )
 
@@ -62,3 +64,36 @@ def test_runtime_config_requires_orthometric_separation(tmp_path: Path):
     base.write_text("{}", encoding="utf-8")
     with pytest.raises(ValueError, match="geoid separation"):
         write_runtime_config(base, tmp_path / "out.yaml", "PINHOLE", None, "orthometric", None)
+
+
+def test_start_job_rejects_parallel_reconstruction(tmp_path: Path, monkeypatch):
+    competing = tmp_path / "older-mission"
+    competing.mkdir()
+    monkeypatch.setattr(
+        "singlepass3d.app_runtime.active_missions", lambda *_args, **_kwargs: [competing]
+    )
+    with pytest.raises(ValueError, match="already running"):
+        start_job(["python", "worker.py"], tmp_path / "new-mission")
+
+
+def test_active_missions_ignores_finished_process(tmp_path: Path, monkeypatch):
+    mission = tmp_path / "mission"
+    mission.mkdir()
+    (mission / "app-job.json").write_text('{"pid": 123}', encoding="utf-8")
+    monkeypatch.setattr("singlepass3d.app_runtime._is_process_running", lambda _pid: False)
+    assert active_missions(tmp_path) == []
+
+
+def test_full_job_with_sparse_metrics_is_partial(tmp_path: Path):
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "metrics.json").write_text(
+        '{"quality_gate":{"passed":true}}', encoding="utf-8"
+    )
+    (tmp_path / "app-job.json").write_text(
+        '{"pid":999999,"command":["reconstruct-video","--full"]}', encoding="utf-8"
+    )
+    status = job_status(tmp_path)
+    assert status["partial"]
+    assert not status["complete"]
+    assert not status["failed"]

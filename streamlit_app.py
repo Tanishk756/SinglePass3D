@@ -248,27 +248,69 @@ def mission_status() -> None:
     mission = Path(st.session_state.mission)
     status = job_status(mission)
     completed = status["checkpoints"]
-    current = STAGES.get(completed[-1], completed[-1]) if completed else "Starting"
-    st.progress(min(len(completed) / len(STAGES), 1.0), text=current)
+    current = status.get("active_detail") or (
+        STAGES.get(completed[-1], completed[-1]) if completed else "Starting"
+    )
+    command = status.get("command", [])
+    video_only = "reconstruct-video" in command
+    full = "--full" in command
+    expected = 4 if video_only else 7
+    if full:
+        expected += 3 + (0 if video_only else 1)
+    st.progress(min(len(completed) / expected, 1.0), text=current)
     state_col, stage_col, name_col = st.columns(3)
     state_col.metric(
         "State",
         "Running" if status["running"] else
-        "Complete" if status["complete"] else "Stopped",
+        "Complete" if status["complete"] else
+        "Sparse ready" if status.get("partial") else "Stopped",
     )
-    stage_col.metric("Stages", f"{len(completed)} / {len(STAGES)}")
+    stage_col.metric("Stages", f"{len(completed)} / {expected}")
+    elapsed = status.get("elapsed_seconds")
+    if elapsed is not None:
+        minutes, seconds = divmod(int(elapsed), 60)
+        st.caption(f"Elapsed {minutes:d}:{seconds:02d} | {current}")
+    competing = status.get("competing_missions", [])
+    if competing:
+        st.warning(
+            "Another reconstruction is also active. CPU and GPU resources are shared, "
+            "so this mission will take longer: " + ", ".join(competing),
+            icon=":material/memory:",
+        )
     name_col.metric("Mission", mission.name)
 
     metrics_path = mission / "reports/metrics.json"
+    sparse_metrics_path = mission / "reports/sparse_metrics.json"
+    if status["running"] and sparse_metrics_path.is_file():
+        sparse_metrics = json.loads(sparse_metrics_path.read_text(encoding="utf-8"))
+        sfm_preview = sparse_metrics.get("sfm", {})
+        st.info(
+            "Sparse 3D is ready; dense GPU reconstruction is continuing. "
+            f"Registered {sfm_preview.get('registered_images', 0)} cameras and "
+            f"{sfm_preview.get('sparse_points', 0):,} points.",
+            icon=":material/view_in_ar:",
+        )
     if status["failed"]:
         st.error("The mission did not pass. Review the engineering log.", icon=":material/error:")
-    if status["complete"] and metrics_path.is_file():
+    if status.get("partial"):
+        st.warning(
+            "Validated sparse 3D is ready. Dense GPU reconstruction is incomplete.",
+            icon=":material/view_in_ar:",
+        )
+        if st.button("Resume dense reconstruction", icon=":material/resume:"):
+            try:
+                start_job(status["command"], mission)
+                st.rerun()
+            except ValueError as exc:
+                st.error(str(exc))
+    if (status["complete"] or status.get("partial")) and metrics_path.is_file():
         metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
         sfm = metrics.get("sfm", {})
         alignment = metrics.get("gps_alignment", {})
         dense = metrics.get("dense", {})
         mesh = metrics.get("mesh", {})
-        st.success("Quality gates passed", icon=":material/check_circle:")
+        if status["complete"]:
+            st.success("Quality gates passed", icon=":material/check_circle:")
         a, b, c, d = st.columns(4)
         a.metric("Registered cameras", sfm.get("registered_images", "n/a"))
         reprojection = sfm.get("mean_reprojection_error_px")
