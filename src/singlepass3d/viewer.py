@@ -39,10 +39,17 @@ def mission_summary(mission: Path) -> dict:
         candidates["video"] = video_files[0]
     manifest = mission / "manifest.json"
     metadata = json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else {}
+    available = {name for name, path in candidates.items() if path.is_file()}
+    reconstruction_level = (
+        "validated_mesh" if "mesh_ply" in available or "mesh_obj" in available
+        else "dense_point_cloud" if "processed" in available or "raw" in available
+        else "sparse_point_cloud"
+    )
     return {
         "name": mission.name,
         "coordinate_frame": metadata.get("coordinate_frame"),
         "metric_scale": metadata.get("metric_scale", True),
+        "reconstruction_level": reconstruction_level,
         "layers": {
             name: "/mission/" + path.relative_to(mission).as_posix()
             for name, path in candidates.items()

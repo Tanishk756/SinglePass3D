@@ -14,7 +14,9 @@ def test_summary_and_safe_server(tmp_path):
     (mission / "geospatial/sparse_georeferenced.ply").write_text("ply", encoding="ascii")
     viewer = tmp_path / "viewer"; viewer.mkdir()
     (viewer / "index.html").write_text("viewer", encoding="utf-8")
-    assert "sparse" in mission_summary(mission)["layers"]
+    summary = mission_summary(mission)
+    assert "sparse" in summary["layers"]
+    assert summary["reconstruction_level"] == "sparse_point_cloud"
     server = ThreadingHTTPServer(("127.0.0.1", 0), create_handler(mission, viewer))
     thread = threading.Thread(target=server.serve_forever); thread.start()
     try:
@@ -36,3 +38,10 @@ def test_packaged_viewer_includes_metric_measurement():
     source = asset.read_text(encoding="utf-8-sig")
     assert "Measured distance:" in source
     assert "worldScale" in source
+
+
+def test_viewer_does_not_invent_mesh_from_sparse_points():
+    asset = Path(__file__).parents[1] / "src/singlepass3d/viewer_assets/viewer.js"
+    source = asset.read_text(encoding="utf-8-sig")
+    assert "auto-generate high-quality solid surface" not in source
+    assert "SPARSE CAMERA GEOMETRY" in source

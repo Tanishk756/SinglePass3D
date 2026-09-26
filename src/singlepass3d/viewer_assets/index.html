@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>SinglePass3D | Synchronized 2D Video & 3D Digital Twin Studio</title>
+  <title>SinglePass3D | Synchronized 2D Video & 3D Reconstruction Studio</title>
   <style>
     :root {
       color-scheme: dark;
@@ -431,7 +431,7 @@
       <div class="view-toggle-group">
         <button id="btn_view_split" class="view-toggle-btn active">Split 2D / 3D</button>
         <button id="btn_view_video" class="view-toggle-btn">2D Video Stream</button>
-        <button id="btn_view_3d" class="view-toggle-btn">3D Digital Twin</button>
+        <button id="btn_view_3d" class="view-toggle-btn">3D Reconstruction</button>
       </div>
       <label class="btn-ctrl" style="cursor:pointer;">
         📁 Load UAV Video
@@ -485,14 +485,13 @@
       </div>
     </div>
 
-    <!-- Right: 3D Digital Twin -->
+    <!-- Right: 3D Reconstruction -->
     <div class="viewport-3d" id="panel_3d">
       <div class="legend-hud">
         <div><span class="dot mesh"></span>Mesh</div>
         <div><span class="dot pts"></span>Observed 3D</div>
         <div><span class="dot uav"></span>UAV Vector</div>
         <div><span class="dot gps"></span>GPS Track</div>
-        <div><span class="dot hazard"></span>Hazard Ring</div>
       </div>
 
       <div class="tools-floating-panel">
@@ -500,7 +499,6 @@
         <div class="tool-btn-grid">
           <button id="btn_measure_3d" class="tool-btn btn-success">📏 Measure 3D</button>
           <button id="btn_los_3d" class="tool-btn btn-success">👁️ Line of Sight</button>
-          <button id="btn_hazard_3d" class="tool-btn btn-danger">💥 Hazard Cordon</button>
           <button id="btn_camera_fpv" class="tool-btn">🎯 Follow Drone FPV</button>
         </div>
 
@@ -509,7 +507,6 @@
           <label class="layer-toggle-label"><input id="chk_mesh" type="checkbox" checked> 3D Mesh</label>
           <label class="layer-toggle-label"><input id="chk_points" type="checkbox" checked> Points</label>
           <label class="layer-toggle-label"><input id="chk_uav_path" type="checkbox" checked> Trajectory</label>
-          <label class="layer-toggle-label"><input id="chk_hazard" type="checkbox" checked> Hazards</label>
         </div>
         <button id="btn_reset_view" class="tool-btn" style="width:100%;margin-top:4px;">Reset Camera</button>
       </div>

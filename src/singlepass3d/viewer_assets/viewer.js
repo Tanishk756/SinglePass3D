@@ -834,14 +834,6 @@ async function initMission(reqMissionName = null) {
     // Normalize coordinates & center primarily based on 3D building geometry
     centerAll([pointVertices, meshVertices], [visualPath, gpsPath]);
 
-    // If mesh file was not present or empty, auto-generate high-quality solid surface mesh from points with RGB colors!
-    if (!meshVertices.length && pointVertices.length > 0) {
-      const surf = generateSurfaceFromPoints(pointVertices, pointColors, 0.28);
-      meshVertices = surf.vertices;
-      meshColors = surf.colors;
-      meshNormals = computeNormals(meshVertices);
-    }
-
     // Load mission video if present
     if (meta.layers.video) {
       uavVideo.src = meta.layers.video;
@@ -849,7 +841,20 @@ async function initMission(reqMissionName = null) {
     }
 
     const triCount = Math.floor(meshVertices.length / 9);
-    status3D.textContent = `[3D RECONSTRUCTION]\nObserved Points: ${(pointVertices.length / 3).toLocaleString()} | 3D Mesh Triangles: ${triCount.toLocaleString()}\nFrame: ${meta.coordinate_frame || "Local ENU"}\nMesh Status: 🟢 SOLID SHADED 3D SURFACE ACTIVE`;
+    const level = meta.reconstruction_level || "sparse_point_cloud";
+    const labels = {
+      sparse_point_cloud: "SPARSE CAMERA GEOMETRY - DENSE SURFACE NOT READY",
+      dense_point_cloud: "DENSE OBSERVED POINT CLOUD - MESH NOT READY",
+      validated_mesh: "VALIDATED DENSE SURFACE",
+    };
+    if (chkMesh) {
+      chkMesh.disabled = triCount === 0;
+      chkMesh.checked = triCount > 0;
+    }
+    status3D.textContent = `[3D RECONSTRUCTION]
+Observed Points: ${(pointVertices.length / 3).toLocaleString()} | Mesh Triangles: ${triCount.toLocaleString()}
+Frame: ${meta.coordinate_frame || "Local ENU"}
+Product: ${labels[level] || level}`;
     refreshMissionList();
   } catch (err) {
     status3D.textContent = "Telemetry status: " + err.message;
